@@ -17,8 +17,9 @@ import 'route_path.dart';
 
 /// Re-runs the router's redirect when the session or the access policy changes.
 ///
-/// Both matter: signing out must eject the user, and an admin revoking a screen
-/// mid-session must close it rather than wait for the next navigation.
+/// Both matter: signing out must eject the user, switching role must rebuild
+/// the shell, and an admin revoking a screen mid-session must close it rather
+/// than wait for the next navigation.
 class _RouterRefresh extends ChangeNotifier {
   _RouterRefresh(this._ref) {
     _ref
@@ -27,6 +28,18 @@ class _RouterRefresh extends ChangeNotifier {
   }
 
   final Ref _ref;
+}
+
+/// Every screen wraps in the shell that owns it, so the nav bar and the banners
+/// are declared once rather than per screen.
+GoRoute _shellRoute(String path, String screenId, WidgetBuilder body) {
+  return GoRoute(
+    path: path,
+    builder: (context, state) => HomeShell(
+      screenId: screenId,
+      child: Builder(builder: body),
+    ),
+  );
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -40,81 +53,126 @@ final routerProvider = Provider<GoRouter>((ref) {
     errorBuilder: (context, state) =>
         ModulePlaceholder(title: 'Page not found', message: state.uri.path),
     routes: [
-      GoRoute(
-        path: RoutePath.splash,
-        builder: (_, _) => const SplashScreen(),
-      ),
-      GoRoute(
-        path: RoutePath.login,
-        builder: (_, _) => const LoginScreen(),
-      ),
+      GoRoute(path: RoutePath.splash, builder: (_, _) => const SplashScreen()),
+      GoRoute(path: RoutePath.login, builder: (_, _) => const LoginScreen()),
       GoRoute(
         path: RoutePath.noAccess,
         builder: (context, state) => NoAccessView(
           screenId: state.uri.queryParameters['screen'],
-          onBack: () => context.go(RoutePath.home()),
+          onBack: () => context.go(
+            homeFor(ref.read(accessNotifierProvider).shell),
+          ),
         ),
       ),
+      GoRoute(path: RoutePath.settings, builder: (_, _) => const SettingsScreen()),
+      GoRoute(path: RoutePath.unsynced, builder: (_, _) => const UnsyncedScreen()),
+
+      // ── Teacher shell ───────────────────────────────────────────────────────
+      _shellRoute(
+        RoutePath.today,
+        ScreenId.today,
+        (_) => const ModulePlaceholder(title: 'Today', message: 'M05-APP-01'),
+      ),
       GoRoute(
-        path: '/home',
-        builder: (_, state) => HomeShell(
-          tabIndex: int.tryParse(state.uri.queryParameters['t'] ?? '0') ?? 0,
+        path: RoutePath.batches,
+        builder: (context, _) => HomeShell(
+          screenId: ScreenId.batches,
+          child: AttendanceSessionsScreen(
+            onOpenSession: (session) => context.push(
+              RoutePath.batchAttendance(session.id),
+            ),
+          ),
         ),
         routes: [
           GoRoute(
-            path: 'attendance',
-            builder: (context, _) => AttendanceSessionsScreen(
-              onOpenSession: (session) => context.push(
-                RoutePath.attendanceRoster(
-                  sessionId: session.id,
-                  title: session.className,
-                  isFinalised: session.isFinalised,
-                ),
-              ),
+            path: ':batchId/attendance',
+            builder: (context, state) => AttendanceRosterScreen(
+              sessionId: state.pathParameters['batchId'] ?? '',
+              title: state.uri.queryParameters['title'] ?? 'Roster',
+              isFinalised: state.uri.queryParameters['final'] == 'true',
             ),
-            routes: [
-              GoRoute(
-                path: 'roster',
-                builder: (_, state) {
-                  final params = state.uri.queryParameters;
-                  return AttendanceRosterScreen(
-                    sessionId: params['id'] ?? '',
-                    title: params['title'] ?? 'Roster',
-                    isFinalised: params['final'] == 'true',
-                  );
-                },
-              ),
-            ],
-          ),
-          // Modules whose feature packages are still stubs. Each is already
-          // access-gated by the redirect, so wiring the real screen later is a
-          // one-line swap.
-          ..._placeholders,
-          GoRoute(
-            path: 'settings',
-            builder: (_, _) => const SettingsScreen(),
           ),
           GoRoute(
-            path: 'unsynced',
-            builder: (_, _) => const UnsyncedScreen(),
+            path: ':batchId/hifz',
+            builder: (_, _) => const ModulePlaceholder(
+              title: 'Hifz quick log',
+              message: 'M04-APP-01…11 — the most important screen in the product',
+            ),
           ),
         ],
+      ),
+      _shellRoute(
+        RoutePath.teacherReports,
+        ScreenId.teacherReports,
+        (_) => const ModulePlaceholder(title: 'Reports', message: 'M07'),
+      ),
+      GoRoute(
+        path: RoutePath.leaveApprovals,
+        builder: (_, _) => const ModulePlaceholder(title: 'Leave approvals', message: 'M09-APP-04'),
+      ),
+      GoRoute(
+        path: '/students/:studentId',
+        builder: (_, _) => const ModulePlaceholder(title: 'Student', message: 'M02-APP-01'),
+      ),
+      GoRoute(
+        path: '/classes/:classSectionId/marks/:examId',
+        builder: (_, _) => const ModulePlaceholder(title: 'Marks entry', message: 'M06-APP-01'),
+      ),
+
+      // ── Parent shell ────────────────────────────────────────────────────────
+      _shellRoute(
+        RoutePath.wards,
+        ScreenId.wards,
+        (_) => const ModulePlaceholder(title: 'Wards', message: 'M02-APP-03'),
+      ),
+      GoRoute(
+        path: '/wards/:studentId',
+        builder: (_, _) => const ModulePlaceholder(title: 'Ward', message: 'M02-APP-04'),
+        routes: [
+          for (final segment in const [
+            'attendance',
+            'hifz',
+            'academics',
+            'homework',
+            'results',
+            'activities',
+            'leave',
+            'hostel',
+            'canteen',
+            'reports',
+          ])
+            GoRoute(
+              path: segment,
+              builder: (_, _) => ModulePlaceholder(title: segment),
+            ),
+        ],
+      ),
+      _shellRoute(
+        RoutePath.notices,
+        ScreenId.notices,
+        (_) => const ModulePlaceholder(title: 'Notices', message: 'M12-APP-03'),
+      ),
+
+      // ── Hostel shell ────────────────────────────────────────────────────────
+      _shellRoute(
+        RoutePath.rollcall,
+        ScreenId.rollcall,
+        (_) => const ModulePlaceholder(title: 'Roll call', message: 'M10-APP-01'),
+      ),
+      _shellRoute(
+        RoutePath.gatePass,
+        ScreenId.gatePass,
+        (_) => const ModulePlaceholder(title: 'Gate pass', message: 'M10-APP-03'),
+      ),
+      _shellRoute(
+        RoutePath.occupancy,
+        ScreenId.occupancy,
+        (_) => const ModulePlaceholder(title: 'Occupancy', message: 'M10-ADM-01'),
+      ),
+      GoRoute(
+        path: RoutePath.visitors,
+        builder: (_, _) => const ModulePlaceholder(title: 'Visitors', message: 'M10-APP-04'),
       ),
     ],
   );
 });
-
-/// One route per not-yet-built module, named from the shared screen registry so
-/// nothing can be forgotten when a screen is added on the server side.
-final List<GoRoute> _placeholders = [
-  for (final screen in ScreenRegistry.all)
-    if (screen.isNavDestination &&
-        screen.id != ScreenId.dashboard &&
-        screen.id != ScreenId.attendance)
-      GoRoute(
-        path: _pathSegmentFor(screen.id),
-        builder: (_, _) => ModulePlaceholder(title: screen.label),
-      ),
-];
-
-String _pathSegmentFor(String screenId) => screenId.replaceAll('_', '-');

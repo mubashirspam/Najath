@@ -28,7 +28,7 @@ class SettingsScreen extends ConsumerWidget {
               leading: CircleAvatar(child: Text(user.initials)),
               title: Text(user.name),
               subtitle: Text(
-                '${user.displayIdentifier} · ${policy.role.name}',
+                '${user.displayIdentifier} · ${policy.activeRole.wire}',
               ),
             ),
           const Divider(),

@@ -46,7 +46,7 @@ class AppUserDto {
   AppUser toEntity() => AppUser(
     id: id,
     name: name.isEmpty ? (email ?? phoneNumber ?? 'Unknown') : name,
-    role: appRoleFromName(role),
+    role: appRoleFromWire(role),
     // Better Auth stores a placeholder address for OTP-provisioned guardians;
     // showing `9048…@guardian.najath.local` in the profile header would be
     // worse than showing nothing.

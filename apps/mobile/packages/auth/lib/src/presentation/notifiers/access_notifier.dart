@@ -57,6 +57,16 @@ class AccessNotifier extends Notifier<AccessPolicy> {
     }
   }
 
+  /// Switches which role the shell is showing.
+  ///
+  /// Not a re-authentication: the session already carries every role. This
+  /// changes which one the router and nav resolve against, which is what a
+  /// teacher-who-is-also-a-parent does daily.
+  void switchRole(AppRole role) {
+    if (!state.roles.contains(role) || role == state.activeRole) return;
+    state = state.copyWith(activeRole: role);
+  }
+
   /// Drops back to deny-all. Called on sign-out, before the next principal's
   /// policy is loaded.
   Future<void> clear() async {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,13 +13,16 @@ import '../../app/router/route_path.dart';
 
 /// The post-sign-in shell.
 ///
-/// Its navigation is built entirely from the access policy, so a screen the
-/// admin console revokes disappears from the rail and the bottom bar rather
-/// than leading somewhere the user is bounced out of.
+/// Navigation is built entirely from the access policy for the **active
+/// shell**, so a screen the admin console revokes disappears from the bar
+/// rather than leading somewhere the user is bounced out of. One binary, three
+/// experiences — teacher, parent, warden — resolved by role at runtime.
 class HomeShell extends ConsumerWidget {
-  const HomeShell({this.tabIndex = 0, super.key});
+  const HomeShell({required this.screenId, required this.child, super.key});
 
-  final int tabIndex;
+  /// Which registry screen this route renders, so the shell can highlight it.
+  final String screenId;
+  final Widget child;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -27,34 +32,39 @@ class HomeShell extends ConsumerWidget {
       ..watch(syncKeepAliveProvider)
       ..watch(authHooksProvider);
 
-    final destinations = ref.watch(visibleDestinationsProvider);
+    final policy = ref.watch(accessNotifierProvider);
+    final destinations = policy.visibleDestinations;
     final user = ref.watch(currentUserProvider);
-    final isFallback = ref.watch(isPolicyFallbackProvider);
 
-    if (destinations.isEmpty) {
-      return const _NoDestinationsView();
-    }
+    if (destinations.isEmpty) return const _NoDestinationsView();
 
-    final index = tabIndex.clamp(0, destinations.length - 1);
+    final index = destinations.indexWhere((d) => d.id == screenId);
+    final selected = index < 0 ? 0 : index;
     final isWide = context.screenType == ScreenType.desktop;
 
     final body = Column(
       children: [
         const OfflineBanner(),
-        if (isFallback) const FallbackPolicyNotice(),
+        if (policy.isFallback) const FallbackPolicyNotice(),
         const SyncProgressBanner(),
-        Expanded(child: _Landing(destination: destinations[index])),
+        Expanded(child: child),
       ],
     );
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(destinations[index].label),
+        title: Text(ScreenRegistry.byId(screenId)?.label ?? 'Najath'),
         actions: [
           const _PendingWritesButton(),
+          if (policy.hasMultipleRoles)
+            IconButton(
+              tooltip: 'Switch role',
+              icon: const Icon(Icons.swap_horiz),
+              onPressed: () => _showRoleSwitcher(context, ref, policy),
+            ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
-            onPressed: () => context.push(RoutePath.settings()),
+            onPressed: () => context.push(RoutePath.settings),
           ),
           if (user != null)
             Padding(
@@ -70,14 +80,14 @@ class HomeShell extends ConsumerWidget {
           ? Row(
               children: [
                 NavigationRail(
-                  selectedIndex: index,
+                  selectedIndex: selected,
                   labelType: NavigationRailLabelType.all,
-                  onDestinationSelected: (i) => _open(context, destinations[i].id, i),
+                  onDestinationSelected: (i) => _open(context, ref, destinations[i].id),
                   destinations: [
-                    for (final destination in destinations)
+                    for (final d in destinations)
                       NavigationRailDestination(
-                        icon: Icon(_iconFor(destination.id)),
-                        label: Text(destination.label),
+                        icon: Icon(_iconFor(d.id)),
+                        label: Text(d.label),
                       ),
                   ],
                 ),
@@ -86,70 +96,71 @@ class HomeShell extends ConsumerWidget {
               ],
             )
           : body,
-      bottomNavigationBar: isWide
+      bottomNavigationBar: isWide || destinations.length < 2
           ? null
           : NavigationBar(
-              selectedIndex: index,
-              onDestinationSelected: (i) => _open(context, destinations[i].id, i),
+              selectedIndex: selected,
+              onDestinationSelected: (i) => _open(context, ref, destinations[i].id),
               destinations: [
-                for (final destination in destinations)
-                  NavigationDestination(
-                    icon: Icon(_iconFor(destination.id)),
-                    label: destination.label,
-                  ),
+                for (final d in destinations)
+                  NavigationDestination(icon: Icon(_iconFor(d.id)), label: d.label),
               ],
             ),
     );
   }
 
-  /// The tab index lives in the URL, so a refresh or a restored deep link comes
-  /// back to the same tab.
-  void _open(BuildContext context, String screenId, int index) {
-    if (screenId == ScreenId.dashboard) {
-      context.go(RoutePath.home(tabIndex: index));
-      return;
-    }
-    context.go('${RoutePath.forScreen(screenId)}?t=$index');
+  void _open(BuildContext context, WidgetRef ref, String id) {
+    // Ward-scoped destinations need the selected ward; the provider persists it
+    // so switching tabs never loses which child is being viewed.
+    final wardId = ref.read(selectedWardProvider);
+    context.go(RoutePath.forScreen(id, wardId: wardId));
   }
-}
 
-/// Placeholder landing for a destination, until each module ships its own.
-class _Landing extends StatelessWidget {
-  const _Landing({required this.destination});
-
-  final ScreenDefinition destination;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              _iconFor(destination.id),
-              size: 48,
-              color: context.colors.primary,
-            ),
-            const SizedBox(height: 12),
-            Text(destination.label, style: context.text.titleLarge),
-            const SizedBox(height: 6),
-            Text(
-              'Needs ${destination.requires.wire}',
-              style: context.text.bodySmall?.copyWith(
-                color: context.colors.onSurfaceVariant,
-              ),
-            ),
-          ],
+  /// Switching role rebuilds the router and re-scopes every provider — without
+  /// re-authenticating. A teacher who is also a parent uses this daily.
+  void _showRoleSwitcher(BuildContext context, WidgetRef ref, AccessPolicy policy) {
+    unawaited(
+      showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        builder: (context) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final role in policy.roles)
+                ListTile(
+                  leading: Icon(
+                    role == policy.activeRole
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_unchecked,
+                  ),
+                  title: Text(_roleLabel(role)),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    ref.read(accessNotifierProvider.notifier).switchRole(role);
+                  },
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// What a principal sees when the matrix grants them nothing at all — better
-/// than an empty shell with no explanation.
+String _roleLabel(AppRole role) => switch (role) {
+  AppRole.superAdmin => 'System administrator',
+  AppRole.admin => 'Office admin',
+  AppRole.deptHead => 'Department head',
+  AppRole.teacher => 'Teacher',
+  AppRole.hostelWarden => 'Hostel warden',
+  AppRole.canteenManager => 'Canteen manager',
+  AppRole.accountant => 'Accountant',
+  AppRole.parent => 'Parent',
+};
+
+/// What a principal sees when the matrix grants them nothing — better than an
+/// empty shell with no explanation.
 class _NoDestinationsView extends StatelessWidget {
   const _NoDestinationsView();
 
@@ -177,7 +188,7 @@ class _PendingWritesButton extends ConsumerWidget {
 
     return IconButton(
       tooltip: 'Unsynced work',
-      onPressed: () => context.push(RoutePath.unsynced()),
+      onPressed: () => context.push(RoutePath.unsynced),
       icon: Badge.count(
         count: pending.length,
         child: const Icon(Icons.cloud_upload_outlined),
@@ -187,17 +198,17 @@ class _PendingWritesButton extends ConsumerWidget {
 }
 
 IconData _iconFor(String screenId) => switch (screenId) {
-  ScreenId.dashboard => Icons.home_outlined,
-  ScreenId.attendance => Icons.fact_check_outlined,
-  ScreenId.hifz => Icons.menu_book_outlined,
-  ScreenId.academics => Icons.groups_outlined,
-  ScreenId.exams => Icons.assignment_outlined,
-  ScreenId.progress => Icons.trending_up,
-  ScreenId.leave => Icons.event_busy_outlined,
-  ScreenId.hostel => Icons.bed_outlined,
-  ScreenId.canteen => Icons.restaurant_outlined,
-  ScreenId.activities => Icons.emoji_events_outlined,
-  ScreenId.announcements => Icons.campaign_outlined,
-  ScreenId.profile => Icons.person_outline,
+  ScreenId.today => Icons.today_outlined,
+  ScreenId.batches => Icons.groups_outlined,
+  ScreenId.batchHifz => Icons.menu_book_outlined,
+  ScreenId.teacherReports => Icons.insights_outlined,
+  ScreenId.wards => Icons.family_restroom_outlined,
+  ScreenId.wardHifz => Icons.menu_book_outlined,
+  ScreenId.wardAcademics => Icons.school_outlined,
+  ScreenId.wardLeave => Icons.event_busy_outlined,
+  ScreenId.notices => Icons.campaign_outlined,
+  ScreenId.rollcall => Icons.checklist_outlined,
+  ScreenId.gatePass => Icons.qr_code_scanner_outlined,
+  ScreenId.occupancy => Icons.bed_outlined,
   _ => Icons.circle_outlined,
 };

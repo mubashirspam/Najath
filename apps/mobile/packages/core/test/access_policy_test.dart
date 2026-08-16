@@ -5,24 +5,24 @@ void main() {
   group('PermissionSet', () {
     test('drops malformed wire entries rather than granting them', () {
       final set = PermissionSet.fromWire(const [
-        'attendance:mark',
+        'attendance:create',
         'nonsense',
         'a:b:c',
         '',
         ':read',
       ]);
 
-      expect(set.wires, {'attendance:mark'});
-      expect(set.can('attendance', 'mark'), isTrue);
+      expect(set.wires, {'attendance:create'});
+      expect(set.can('attendance', 'create'), isTrue);
     });
 
     test('touches reports any action on a resource', () {
-      final set = PermissionSet.fromWire(const ['hifz:record']);
+      final set = PermissionSet.fromWire(const ['hifzLog:create']);
 
-      expect(set.touches('hifz'), isTrue);
+      expect(set.touches('hifzLog'), isTrue);
       expect(set.touches('exam'), isFalse);
       // Must not match a resource that merely shares a prefix.
-      expect(PermissionSet.fromWire(const ['exams:read']).touches('exam'), isFalse);
+      expect(PermissionSet.fromWire(const ['hifzLogs:read']).touches('hifzLog'), isFalse);
     });
   });
 
@@ -30,47 +30,50 @@ void main() {
     AccessPolicy policyWith({
       required Set<String> screens,
       required List<String> permissions,
+      AppRole role = AppRole.teacher,
     }) => AccessPolicy(
-      role: AppRole.teacher,
+      roles: {role},
+      activeRole: role,
       permissions: PermissionSet.fromWire(permissions),
       screens: screens,
+      scopes: const AccessScopes.empty(),
       version: 3,
       fetchedAt: DateTime(2026, 8, 16),
     );
 
     test('opens a screen that is granted and backed by its permission', () {
       final policy = policyWith(
-        screens: {ScreenId.attendance},
-        permissions: ['attendance:read'],
+        screens: {ScreenId.batchHifz},
+        permissions: ['hifzLog:create'],
       );
 
-      expect(policy.canOpen(ScreenId.attendance), isTrue);
+      expect(policy.canOpen(ScreenId.batchHifz), isTrue);
     });
 
     test('refuses a screen the matrix does not list', () {
-      final policy = policyWith(screens: {}, permissions: ['attendance:read']);
+      final policy = policyWith(screens: {}, permissions: ['hifzLog:create']);
 
-      expect(policy.canOpen(ScreenId.attendance), isFalse);
+      expect(policy.canOpen(ScreenId.batchHifz), isFalse);
     });
 
     test(
       'refuses a granted screen once its underlying permission is revoked',
       () {
-        // The case the whole two-condition check exists for: an admin revokes
-        // `attendance:read` but forgets to untick the screen.
+        // The case the two-condition check exists for: an admin revokes
+        // `hifzLog:create` but forgets to untick the screen.
         final policy = policyWith(
-          screens: {ScreenId.attendance},
-          permissions: ['hifz:read'],
+          screens: {ScreenId.batchHifz},
+          permissions: ['attendance:read'],
         );
 
-        expect(policy.canOpen(ScreenId.attendance), isFalse);
+        expect(policy.canOpen(ScreenId.batchHifz), isFalse);
       },
     );
 
     test('refuses a screen id that is not in the registry', () {
       final policy = policyWith(
         screens: {'screen_removed_last_release'},
-        permissions: ['attendance:read'],
+        permissions: ['hifzLog:create'],
       );
 
       expect(policy.canOpen('screen_removed_last_release'), isFalse);
@@ -86,50 +89,115 @@ void main() {
     });
   });
 
-  group('AccessPolicy.fallbackFor', () {
-    test('grants a guardian the registry defaults and nothing more', () {
-      final policy = AccessPolicy.fallbackFor(AppRole.guardian);
+  group('shells', () {
+    test('each role resolves to exactly one shell', () {
+      expect(shellForRole(AppRole.teacher), AppShell.teacher);
+      expect(shellForRole(AppRole.deptHead), AppShell.teacher);
+      expect(shellForRole(AppRole.parent), AppShell.parent);
+      expect(shellForRole(AppRole.hostelWarden), AppShell.hostel);
+    });
 
-      expect(policy.canOpen(ScreenId.attendance), isTrue);
-      // Marking is staff-only, and is not a nav destination a guardian gets.
-      expect(policy.canOpen(ScreenId.attendanceMark), isFalse);
-      expect(policy.canOpen(ScreenId.academics), isFalse);
+    test('visible destinations are scoped to the active shell', () {
+      final policy = AccessPolicy.fallbackFor(AppRole.parent);
+
+      expect(policy.shell, AppShell.parent);
+      for (final destination in policy.visibleDestinations) {
+        expect(destination.shell, AppShell.parent, reason: destination.id);
+      }
+      // A parent never sees a teacher tab, even by accident.
+      expect(
+        policy.visibleDestinations.map((d) => d.id),
+        isNot(contains(ScreenId.batches)),
+      );
+    });
+
+    test('switching the active role switches the shell', () {
+      // A teacher who is also a parent of a student in the same college.
+      final policy = AccessPolicy(
+        roles: const {AppRole.teacher, AppRole.parent},
+        activeRole: AppRole.teacher,
+        permissions: PermissionSet.fromWire(const [
+          'timetable:read',
+          'student:read',
+        ]),
+        screens: const {ScreenId.today, ScreenId.wards},
+        scopes: const AccessScopes(wardIds: {'student-9'}),
+        version: 1,
+        fetchedAt: DateTime(2026, 8, 16),
+      );
+
+      expect(policy.shell, AppShell.teacher);
+      expect(policy.hasMultipleRoles, isTrue);
+      expect(policy.copyWith(activeRole: AppRole.parent).shell, AppShell.parent);
+    });
+  });
+
+  group('AccessPolicy.fallbackFor', () {
+    test('grants a parent the registry defaults and nothing more', () {
+      final policy = AccessPolicy.fallbackFor(AppRole.parent);
+
+      expect(policy.canOpen(ScreenId.wards), isTrue);
+      expect(policy.canOpen(ScreenId.wardHifz), isTrue);
+      // Teacher screens are not a parent's, whatever the shell.
+      expect(policy.canOpen(ScreenId.batchHifz), isFalse);
+      expect(policy.canOpen(ScreenId.rollcall), isFalse);
       expect(policy.isFallback, isTrue);
     });
 
-    test('admin defaults cover every registered screen', () {
-      final policy = AccessPolicy.fallbackFor(AppRole.admin);
+    test('a canteen manager gets no mobile screens at all', () {
+      // Canteen is a console-only module; the registry has no canteen shell.
+      final policy = AccessPolicy.fallbackFor(AppRole.canteenManager);
 
-      for (final screen in ScreenRegistry.all) {
-        expect(policy.canOpen(screen.id), isTrue, reason: screen.id);
-      }
+      expect(policy.visibleDestinations, isEmpty);
+    });
+  });
+
+  group('AccessScopes', () {
+    test("ward scope contains only this guardian's children", () {
+      const scopes = AccessScopes(wardIds: {'student-1'});
+
+      expect(scopes.contains(ScopeType.ward, 'student-1'), isTrue);
+      // The failure the whole design exists to prevent.
+      expect(scopes.contains(ScopeType.ward, 'student-2'), isFalse);
+    });
+
+    test('assigned scope covers batches and class sections', () {
+      const scopes = AccessScopes(
+        batchIds: {'batch-1'},
+        classSectionIds: {'class-1'},
+      );
+
+      expect(scopes.contains(ScopeType.assigned, 'batch-1'), isTrue);
+      expect(scopes.contains(ScopeType.assigned, 'class-1'), isTrue);
+      expect(scopes.contains(ScopeType.assigned, 'batch-9'), isFalse);
+    });
+
+    test('global contains everything, none contains nothing', () {
+      const scopes = AccessScopes.empty();
+
+      expect(scopes.contains(ScopeType.global, 'anything'), isTrue);
+      expect(scopes.contains(ScopeType.none, 'anything'), isFalse);
     });
   });
 
   group('AccessPolicy.isEquivalentTo', () {
-    test('ignores fetchedAt so a no-op refetch does not rebuild the tree', () {
-      final a = AccessPolicy(
-        role: AppRole.staff,
-        permissions: PermissionSet.fromWire(const ['attendance:read']),
-        screens: {ScreenId.attendance},
-        version: 7,
-        fetchedAt: DateTime(2026, 8, 16),
-      );
-      final b = a.copyWith(fetchedAt: DateTime(2026, 8, 17));
+    final base = AccessPolicy(
+      roles: const {AppRole.teacher},
+      activeRole: AppRole.teacher,
+      permissions: PermissionSet.fromWire(const ['attendance:read']),
+      screens: const {ScreenId.today},
+      scopes: const AccessScopes.empty(),
+      version: 7,
+      fetchedAt: DateTime(2026, 8, 16),
+    );
 
-      expect(a.isEquivalentTo(b), isTrue);
+    test('ignores fetchedAt so a no-op refetch does not rebuild the tree', () {
+      expect(base.isEquivalentTo(base.copyWith(fetchedAt: DateTime(2026, 8, 17))), isTrue);
     });
 
-    test('notices a version bump', () {
-      final a = AccessPolicy(
-        role: AppRole.staff,
-        permissions: PermissionSet.fromWire(const ['attendance:read']),
-        screens: {ScreenId.attendance},
-        version: 7,
-        fetchedAt: DateTime(2026, 8, 16),
-      );
-
-      expect(a.isEquivalentTo(a.copyWith(version: 8)), isFalse);
+    test('notices a version bump and a role switch', () {
+      expect(base.isEquivalentTo(base.copyWith(version: 8)), isFalse);
+      expect(base.isEquivalentTo(base.copyWith(activeRole: AppRole.parent)), isFalse);
     });
   });
 

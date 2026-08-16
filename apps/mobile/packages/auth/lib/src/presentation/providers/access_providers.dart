@@ -31,10 +31,15 @@ final visibleDestinationsProvider = Provider<List<ScreenDefinition>>((ref) {
   return ref.watch(accessNotifierProvider).visibleDestinations;
 });
 
+/// The shell the active role resolves to. Drives which nav the app renders.
+final activeShellProvider = Provider<AppShell>((ref) {
+  return ref.watch(accessNotifierProvider).shell;
+});
+
 /// The principal's role, for the few places that genuinely branch on it rather
 /// than on a permission — copy, empty states, which dashboard to show.
 final currentRoleProvider = Provider<AppRole>((ref) {
-  return ref.watch(accessNotifierProvider).role;
+  return ref.watch(accessNotifierProvider).activeRole;
 });
 
 /// True while the app is running on registry defaults because no policy has

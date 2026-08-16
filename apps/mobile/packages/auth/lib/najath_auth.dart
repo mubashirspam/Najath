@@ -17,3 +17,4 @@ export 'src/presentation/notifiers/access_notifier.dart';
 export 'src/presentation/notifiers/auth_notifier.dart';
 export 'src/presentation/providers/access_providers.dart';
 export 'src/presentation/providers/auth_hooks.dart';
+export 'src/presentation/providers/selected_ward.dart';

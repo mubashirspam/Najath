@@ -24,8 +24,10 @@ class AppUser {
   final String? phoneNumber;
   final String? imageUrl;
 
-  bool get isGuardian => role == AppRole.guardian;
-  bool get isStaff => role == AppRole.staff || role == AppRole.admin;
+  /// Guardians sign in by phone OTP and are the only non-staff principal.
+  bool get isGuardian => role == AppRole.parent;
+
+  bool get isStaff => role != AppRole.parent;
   bool get isTeacher => role == AppRole.teacher;
 
   String get displayIdentifier => email ?? phoneNumber ?? id;
