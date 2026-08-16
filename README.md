@@ -55,6 +55,77 @@ dart run melos run analyze | test | gen | gen:watch | format | clean:deep
 - **Firebase** — `google-services.json` / `GoogleService-Info.plist` per flavor.
   Both are gitignored.
 
+## Mobile architecture
+
+Layering follows the Telios 3.0 reference: routing → UI → Riverpod notifiers →
+domain → data → core infrastructure, offline-first throughout. Telios keeps it in
+one `lib/`; here the same layers are the workspace packages.
+
+| Telios                                           | Najath package                                      |
+| ------------------------------------------------ | --------------------------------------------------- |
+| `core/config,constants,error,storage,responsive` | `najath_core`                                       |
+| `core/network`                                   | `najath_network` — `DioClient`, `ApiResponse`       |
+| Hive local sources                               | `najath_local_db` — drift JSON cache + write outbox |
+| `shared/sync`                                    | `najath_sync` — paced pipeline, task registry       |
+| `features/auth`                                  | `najath_auth` — session + access policy             |
+| `app/theme`, shared widgets                      | `najath_design_system`                              |
+| `features/<name>`                                | `packages/features/<name>`                          |
+
+Each feature keeps the same internal shape:
+
+```
+features/<name>/lib/src/
+├── data/          data_sources/ · models/ (DTOs) · repositories/ (+ providers)
+├── domain/        entities/ · repositories/ (contracts) · use_cases/
+└── presentation/  notifiers/ · screens/ · widgets/
+```
+
+Notifiers are hand-written (`Notifier` / `AsyncNotifier`), as in Telios. The one
+exception to "no codegen" is drift, which requires it — everything else is
+hand-written `fromJson` / `toEntity` / `copyWith`.
+
+`packages/features/attendance` is the worked example of the whole stack; the
+other modules are wired but their screens are placeholders.
+
+### Offline
+
+Reads are cache-first: `CacheStore` holds one JSON document per row in a named
+box, and repositories fall back to the network only on a miss. Writes are the
+other way round — `OutboxStore` commits locally and queues the request, and
+`SyncEngine` drains it oldest-first when a transport appears. A repeated edit of
+the same target collapses on `dedupeKey`, so correcting a mark three times
+offline still sends one request carrying the final answer.
+
+`SyncEngine` knows nothing about any feature: modules register a `SyncTask` and
+the app supplies the list via `syncTasksProvider`.
+
+## Roles and screen access
+
+The admin console controls which screens each role can open. The registry lives
+in `packages/contracts/src/access.ts` — the single source of truth for the
+console, the API, and the app. The Dart mirror
+(`apps/mobile/packages/core/lib/src/access/screen_registry.dart`) is emitted from
+it and CI fails if it drifts:
+
+```bash
+pnpm --filter @najath/contracts emit:dart
+```
+
+`resolveAccessPolicy` (`@najath/core`) layers registry defaults → the role
+matrix → per-role permission overrides → per-user overrides, and serves the
+result from `GET /api/v1/me/access`. A screen survives only if it is granted
+**and** the role still holds the permission it declares, so revoking a
+permission closes every screen depending on it.
+
+On the device the policy is cached in secure storage (not the clearable cache),
+so access stays correct offline. It drives three things: the router's redirect
+guard, the nav shell's destinations, and `PermissionGate` / `ScreenGate` around
+individual affordances. A 403 from the API refetches the policy — that means an
+admin changed the matrix since the last fetch.
+
+None of this is the security boundary; the API re-checks every request. It is
+what stops the UI offering things that would 403.
+
 ## Branches and environments
 
 Three long-lived branches, **two** databases — `dev` and `staging` share one.

@@ -14,8 +14,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@najath/contracts": "workspace:*",
     "@najath/db": "workspace:*",
-    "date-fns": "^4.4.0"
+    "date-fns": "^4.4.0",
+    "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
     "typescript": "^5.9.3"

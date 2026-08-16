@@ -19,5 +19,4 @@ class F {
         return 'Najath';
     }
   }
-
 }

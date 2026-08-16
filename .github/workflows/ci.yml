@@ -31,6 +31,17 @@ jobs:
       - name: Check formatting
         run: pnpm exec prettier --check "**/*.{ts,tsx,md,json,yaml,yml}"
 
+      - name: Verify the Dart access registry matches the contracts
+        # screen_registry.dart is committed so `flutter analyze` works on a
+        # fresh clone; this is what stops it drifting from access.ts.
+        run: |
+          pnpm --filter @najath/contracts emit:dart
+          if ! git diff --quiet -- apps/mobile/packages/core/lib/src/access/screen_registry.dart; then
+            echo "::error::screen_registry.dart is out of date. Run 'pnpm --filter @najath/contracts emit:dart' and commit the result."
+            git --no-pager diff -- apps/mobile/packages/core/lib/src/access/screen_registry.dart
+            exit 1
+          fi
+
       # One turbo invocation so the task graph is shared and `build` reuses
       # whatever `typecheck` already produced.
       - name: Lint, typecheck, build
@@ -60,6 +71,9 @@ jobs:
       # Resolves the whole pub workspace in one go; melos is a dev_dependency
       # of the workspace root, so no global activation is needed.
       - run: flutter pub get
+
+      # Drift's *.g.dart is gitignored, so nothing analyses until it exists.
+      - run: dart run melos run gen
 
       - run: dart run melos run analyze
 
@@ -95,6 +109,10 @@ jobs:
           cache: true
 
       - run: flutter pub get
+
+      - name: Generate drift code
+        working-directory: apps/mobile
+        run: dart run melos run gen
 
       - name: Pick the flavor for this branch
         id: flavor

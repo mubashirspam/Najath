@@ -1,0 +1,103 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:najath_core/najath_core.dart';
+import 'package:najath_network/najath_network.dart';
+
+import '../../domain/entities/app_user.dart';
+import '../../domain/repositories/auth_repository.dart';
+import '../data_sources/auth_remote_source.dart';
+import '../models/app_user_dto.dart';
+
+class AuthRepositoryImpl implements AuthRepository {
+  AuthRepositoryImpl({
+    required AuthRemoteSource remote,
+    required TokenStorage storage,
+  }) : _remote = remote,
+       _storage = storage;
+
+  final AuthRemoteSource _remote;
+  final TokenStorage _storage;
+
+  @override
+  Future<ApiResponse<AppUser>> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    final res = await _remote.signInWithEmail(email: email, password: password);
+    return _persist(res);
+  }
+
+  @override
+  Future<ApiResponse<void>> requestPhoneOtp(String phoneNumber) =>
+      _remote.requestPhoneOtp(phoneNumber);
+
+  @override
+  Future<ApiResponse<AppUser>> verifyPhoneOtp({
+    required String phoneNumber,
+    required String code,
+  }) async {
+    final res = await _remote.verifyPhoneOtp(
+      phoneNumber: phoneNumber,
+      code: code,
+    );
+    return _persist(res);
+  }
+
+  @override
+  Future<ApiResponse<AppUser>> currentSession() async {
+    final res = await _remote.session();
+    if (!res.hasData) return res.castError<AppUser>();
+
+    final dto = res.data!;
+    await _storage.saveUserId(dto.id);
+    await _storage.saveUserJson(dto.toJson());
+    return ApiResponse<AppUser>.completed(dto.toEntity());
+  }
+
+  @override
+  Future<AppUser?> cachedUser() async {
+    final json = await _storage.getUserJson();
+    if (json == null) return null;
+    return AppUserDto.fromJson(json).toEntity();
+  }
+
+  @override
+  Future<bool> hasStoredSession() async {
+    final token = await _storage.getToken();
+    return token != null && token.isNotEmpty;
+  }
+
+  @override
+  Future<void> signOut() async {
+    // Tell the server first so the session row is revoked, but clear locally
+    // whatever happens — a user signing out on a plane must still be signed out.
+    await _remote.signOut();
+    await _storage.clearSession();
+  }
+
+  @override
+  Future<void> saveRememberMe({required bool remember, String? identifier}) =>
+      _storage.saveRememberMe(remember: remember, identifier: identifier);
+
+  @override
+  Future<bool> getRememberMe() => _storage.getRememberMe();
+
+  @override
+  Future<String?> savedIdentifier() => _storage.getSavedIdentifier();
+
+  Future<ApiResponse<AppUser>> _persist(ApiResponse<SignInResult> res) async {
+    if (!res.hasData) return res.castError<AppUser>();
+
+    final result = res.data!;
+    await _storage.saveToken(result.token);
+    await _storage.saveUserId(result.user.id);
+    await _storage.saveUserJson(result.user.toJson());
+    return ApiResponse<AppUser>.completed(result.user.toEntity());
+  }
+}
+
+final authRepositoryProvider = Provider<AuthRepository>((ref) {
+  return AuthRepositoryImpl(
+    remote: ref.watch(authRemoteSourceProvider),
+    storage: ref.watch(tokenStorageProvider),
+  );
+});

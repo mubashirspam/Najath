@@ -17,3 +17,12 @@ linter:
     lines_longer_than_80_chars: false
     # `flutter pub add` appends rather than inserts; not worth the churn.
     sort_pub_dependencies: false
+    # Dart's own style guide prefers relative imports inside a package's lib/,
+    # and it keeps a file's own-package imports visually distinct from the
+    # cross-package ones that actually cross a boundary here.
+    always_use_package_imports: false
+    prefer_relative_imports: true
+    # Repositories and data sources take public named parameters and assign
+    # them to private fields. Dart forbids a private named parameter, so the
+    # initializing formal this lint asks for would strip the argument labels.
+    prefer_initializing_formals: false

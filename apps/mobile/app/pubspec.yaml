@@ -8,6 +8,40 @@ environment:
   sdk: ^3.12.2
 
 dependencies:
+  najath_core:
+    path: ../packages/core
+  najath_network:
+    path: ../packages/network
+  najath_local_db:
+    path: ../packages/local_db
+  najath_sync:
+    path: ../packages/sync
+  najath_auth:
+    path: ../packages/auth
+  najath_design_system:
+    path: ../packages/design_system
+  najath_attendance:
+    path: ../packages/features/attendance
+  najath_hifz:
+    path: ../packages/features/hifz
+  najath_academics:
+    path: ../packages/features/academics
+  najath_exams:
+    path: ../packages/features/exams
+  najath_progress:
+    path: ../packages/features/progress
+  najath_leave:
+    path: ../packages/features/leave
+  najath_hostel:
+    path: ../packages/features/hostel
+  najath_canteen:
+    path: ../packages/features/canteen
+  najath_activities:
+    path: ../packages/features/activities
+  najath_announcements:
+    path: ../packages/features/announcements
+  najath_profile:
+    path: ../packages/features/profile
   cached_network_image: ^3.4.1
   collection: ^1.19.1
   connectivity_plus: ^7.3.1
