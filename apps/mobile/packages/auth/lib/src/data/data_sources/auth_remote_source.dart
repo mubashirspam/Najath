@@ -18,7 +18,7 @@ class AuthRemoteSource {
 
   final DioClient _client;
 
-  Future<ApiResponse<SignInResult>> signInWithEmail({
+  Future<Result<SignInResult>> signInWithEmail({
     required String email,
     required String password,
   }) {
@@ -26,20 +26,20 @@ class AuthRemoteSource {
       endpoint: ApiEndpoints.signInEmail,
       isAuth: true,
       data: {'email': email, 'password': password},
-      mapper: _mapSignIn,
+      decode: _mapSignIn,
     );
   }
 
-  Future<ApiResponse<void>> requestPhoneOtp(String phoneNumber) {
+  Future<Result<void>> requestPhoneOtp(String phoneNumber) {
     return _client.post<void>(
       endpoint: ApiEndpoints.phoneOtpSend,
       isAuth: true,
       data: {'phoneNumber': phoneNumber},
-      mapper: (_) {},
+      decode: (_) {},
     );
   }
 
-  Future<ApiResponse<SignInResult>> verifyPhoneOtp({
+  Future<Result<SignInResult>> verifyPhoneOtp({
     required String phoneNumber,
     required String code,
   }) {
@@ -47,17 +47,17 @@ class AuthRemoteSource {
       endpoint: ApiEndpoints.phoneOtpVerify,
       isAuth: true,
       data: {'phoneNumber': phoneNumber, 'code': code},
-      mapper: _mapSignIn,
+      decode: _mapSignIn,
     );
   }
 
   /// Re-reads the session. The bearer token is attached by `DioClient`, so a
   /// 401 here means the session record is gone server-side.
-  Future<ApiResponse<AppUserDto>> session() {
+  Future<Result<AppUserDto>> session() {
     return _client.get<AppUserDto>(
       endpoint: ApiEndpoints.session,
       isAuth: true,
-      mapper: (body) {
+      decode: (body) {
         final map = body as Map<String, dynamic>;
         final user = map['user'];
         if (user is! Map<String, dynamic>) {
@@ -68,18 +68,18 @@ class AuthRemoteSource {
     );
   }
 
-  Future<ApiResponse<void>> signOut() {
+  Future<Result<void>> signOut() {
     return _client.post<void>(
       endpoint: ApiEndpoints.signOut,
       isAuth: true,
-      mapper: (_) {},
+      decode: (_) {},
     );
   }
 
-  Future<ApiResponse<AccessPolicyDto>> accessPolicy() {
+  Future<Result<AccessPolicyDto>> accessPolicy() {
     return _client.get<AccessPolicyDto>(
       endpoint: ApiEndpoints.myAccess,
-      mapper: (body) => AccessPolicyDto.fromJson(body as Map<String, dynamic>),
+      decode: (body) => AccessPolicyDto.fromJson(body as Map<String, dynamic>),
     );
   }
 

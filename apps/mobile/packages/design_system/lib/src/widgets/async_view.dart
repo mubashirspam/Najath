@@ -2,62 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:najath_core/najath_core.dart';
 import 'package:shimmer/shimmer.dart';
 
-/// Renders the three states of an `AsyncValue` consistently across features.
+/// Renders a [Failure] the way the product wants it read.
 ///
-/// Without this every screen invents its own spinner and error card, and an
-/// offline miss ends up looking like a crash.
-class AsyncView<T> extends StatelessWidget {
-  const AsyncView({
-    required this.value,
-    required this.data,
-    this.onRetry,
-    this.loading,
-    this.emptyMessage,
-    this.isEmpty,
-    super.key,
-  });
+/// Offline is phrased as a normal state, not an error — in a boarding academy
+/// it is the common case, and a red exclamation mark trains people to ignore
+/// warnings.
+class FailureView extends StatelessWidget {
+  const FailureView({required this.failure, this.onRetry, super.key});
 
-  final AsyncSnapshotLike<T> value;
-  final Widget Function(T data) data;
-  final VoidCallback? onRetry;
-  final Widget? loading;
-  final String? emptyMessage;
-  final bool Function(T data)? isEmpty;
-
-  @override
-  Widget build(BuildContext context) {
-    if (value.isLoading) {
-      return loading ?? const ListSkeleton();
-    }
-    if (value.error != null) {
-      return ErrorView(error: value.error!, onRetry: onRetry);
-    }
-    final result = value.data as T;
-    if (isEmpty?.call(result) ?? false) {
-      return EmptyView(message: emptyMessage ?? 'Nothing here yet');
-    }
-    return data(result);
-  }
-}
-
-/// Minimal view model so this widget does not depend on a specific async type.
-class AsyncSnapshotLike<T> {
-  const AsyncSnapshotLike({this.data, this.error, this.isLoading = false});
-
-  final T? data;
-  final ApiError? error;
-  final bool isLoading;
-}
-
-class ErrorView extends StatelessWidget {
-  const ErrorView({required this.error, this.onRetry, super.key});
-
-  final ApiError error;
+  final Failure failure;
   final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
-    final isOffline = error.isNetworkError || error.isOffline;
+    final offline = failure.isOffline;
 
     return Center(
       child: Padding(
@@ -66,17 +24,17 @@ class ErrorView extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              isOffline ? Icons.cloud_off_outlined : Icons.error_outline,
+              offline ? Icons.cloud_off_outlined : Icons.error_outline,
               size: 44,
               color: context.colors.onSurfaceVariant,
             ),
             const SizedBox(height: 12),
             Text(
-              error.message,
+              headline(failure),
               style: context.text.bodyMedium,
               textAlign: TextAlign.center,
             ),
-            if (isOffline) ...[
+            if (offline) ...[
               const SizedBox(height: 6),
               Text(
                 'This will load once you are back online.',
@@ -86,7 +44,7 @@ class ErrorView extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
             ],
-            if (onRetry != null) ...[
+            if (onRetry != null && failure.isRetryable) ...[
               const SizedBox(height: 16),
               OutlinedButton.icon(
                 onPressed: onRetry,
@@ -99,6 +57,23 @@ class ErrorView extends StatelessWidget {
       ),
     );
   }
+
+  /// Placeholder copy until the ARB files land (P0-APP-09). The mapping lives
+  /// here, at the presentation edge — never in the domain layer, which carries
+  /// codes only.
+  /// Localizable one-line copy for a failure. Public so a snackbar can reuse
+  /// the same mapping as the full-page view.
+  static String headline(Failure failure) => switch (failure) {
+    NetworkFailure() || UnavailableOfflineFailure() => 'Not available offline yet',
+    TimeoutFailure() => 'The server took too long to respond',
+    UnauthorizedFailure() => 'Your session has ended',
+    ForbiddenFailure() => 'You do not have access to this',
+    ValidationFailure() => 'Some details need correcting',
+    ConflictFailure() => 'This was changed somewhere else',
+    NotFoundFailure() => 'Not found',
+    ServerFailure() => 'Something went wrong at our end',
+    UnknownFailure() => 'Something went wrong',
+  };
 }
 
 class EmptyView extends StatelessWidget {

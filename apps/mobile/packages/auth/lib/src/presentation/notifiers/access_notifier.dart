@@ -45,9 +45,10 @@ class AccessNotifier extends Notifier<AccessPolicy> {
     _refreshing = true;
     try {
       final result = await ref.read(accessRepositoryProvider).fetch();
-      if (!result.hasData) return;
-
-      final fresh = result.data!;
+      final fresh = result.valueOrNull;
+      // A failed refresh keeps whatever is cached. Never fall back to deny-all
+      // on a network blip — that would empty the nav bar mid-lesson.
+      if (fresh == null) return;
       // Skip the emission when nothing the UI renders has changed, so a
       // periodic refresh does not rebuild every guarded widget in the tree.
       if (state.isEquivalentTo(fresh)) return;

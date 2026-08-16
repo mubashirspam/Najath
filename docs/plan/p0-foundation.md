@@ -25,8 +25,9 @@ after M04 is built on top of them.
 | `P0-REC-06` | Rework the outbox to the spec's shape                                      | Current outbox has no `idempotencyKey`, no `entity`/`operation` split, no `SyncCursor`. Delta pull cannot work without a cursor table.                                        | `najath_local_db`, `najath_sync`                                           |
 | `P0-REC-07` | Move date handling to `Asia/Kolkata` calendar dates                        | Current code uses `DateTime.now()` and UTC ISO strings for academic dates. A 6 AM Fajr halaqa logs against yesterday.                                                         | `najath_core`, `packages/core`                                             |
 
-> `P0-REC-04` is the big one — roughly a week, and it invalidates the attendance
-> feature written against the box store. Do it before M03, not after.
+> **Status:** REC-01, 02, 03, 04, 06 and 07 are done. `P0-REC-05` (@riverpod
+> codegen) is the only one outstanding, and it is cosmetic next to the rest —
+> the providers are hand-written but correctly shaped, so it can move whenever.
 
 **What survives unchanged:** the monorepo layout, package boundaries, CI, the
 Neon branch-per-PR migration flow, the flavor setup, the design-system split, and

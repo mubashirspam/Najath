@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:najath_core/najath_core.dart';
-import 'package:najath_network/najath_network.dart';
 
 import '../../domain/repositories/auth_repository.dart';
 import '../data_sources/auth_remote_source.dart';
@@ -30,15 +29,14 @@ class AccessRepositoryImpl implements AccessRepository {
   }
 
   @override
-  Future<ApiResponse<AccessPolicy>> fetch() async {
+  Future<Result<AccessPolicy>> fetch() async {
     final res = await _remote.accessPolicy();
-    if (!res.hasData) return res.castError<AccessPolicy>();
+    final failure = res.failureOrNull;
+    if (failure != null) return fail(failure);
 
-    final dto = res.data!;
+    final dto = res.valueOrNull!;
     await _storage.saveAccessPolicy(dto.toJson());
-    return ApiResponse<AccessPolicy>.completed(
-      dto.toEntity(fetchedAt: DateTime.now()),
-    );
+    return ok(dto.toEntity(fetchedAt: DateTime.now()));
   }
 
   @override

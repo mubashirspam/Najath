@@ -104,7 +104,7 @@ class SyncProgressBanner extends ConsumerWidget {
       progress.label == null ? 'Sending your changes…' : 'Sending ${progress.label}…',
     SyncPhase.downloading => progress.label == null ? 'Updating…' : 'Updating ${progress.label}…',
     SyncPhase.done => 'Everything is up to date',
-    SyncPhase.failed => progress.lastError ?? 'Sync could not finish',
+    SyncPhase.failed => 'Sync could not finish',
     SyncPhase.idle => '',
   };
 }

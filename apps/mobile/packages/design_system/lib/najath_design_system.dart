@@ -6,5 +6,6 @@ export 'src/providers/theme_provider.dart';
 export 'src/theme/app_colors.dart';
 export 'src/theme/app_theme.dart';
 export 'src/widgets/async_view.dart';
+export 'src/widgets/attendance_toggle.dart';
 export 'src/widgets/permission_gate.dart';
 export 'src/widgets/status_banners.dart';

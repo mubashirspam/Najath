@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:najath_auth/najath_auth.dart';
 import 'package:najath_core/najath_core.dart';
+import 'package:najath_design_system/najath_design_system.dart';
 
 /// Two sign-in surfaces on one screen.
 ///
@@ -47,9 +48,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final isGuardian = auth.method == SignInMethod.guardianOtp;
 
     ref.listen(authNotifierProvider, (previous, next) {
-      final error = next.error;
-      if (error != null && error != previous?.error) {
-        context.showSnack(error.message, isError: true);
+      final failure = next.failure;
+      if (failure != null && failure != previous?.failure) {
+        context.showSnack(FailureView.headline(failure), isError: true);
       }
     });
 

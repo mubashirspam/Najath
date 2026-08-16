@@ -37,7 +37,9 @@ class UnsyncedScreen extends ConsumerWidget {
           Expanded(
             child: pending.when(
               loading: () => const ListSkeleton(rows: 3),
-              error: (error, _) => ErrorView(error: ApiError.fromException(error)),
+              error: (error, stack) => FailureView(
+                failure: error is Failure ? error : Failure.unknown(error, stack),
+              ),
               data: (writes) {
                 if (writes.isEmpty) {
                   return const EmptyView(
@@ -75,7 +77,7 @@ class _WriteTile extends StatelessWidget {
         write.isBlocked ? Icons.error_outline : Icons.schedule,
         color: write.isBlocked ? context.colors.error : null,
       ),
-      title: Text(write.label ?? write.module),
+      title: Text(write.label ?? write.entity),
       subtitle: Text(
         write.isBlocked
             ? (write.lastError ?? 'Rejected by the server')

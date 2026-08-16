@@ -5,19 +5,39 @@ import 'package:flutter/material.dart';
 /// An explicit `ColorScheme` rather than `ColorScheme.fromSeed`: the academy's
 /// green is a fixed brand colour and seed generation would drift it between
 /// Flutter releases.
-class AppColors {
-  AppColors._();
+/// Brand and semantic tokens.
+///
+/// Named `HufzTokens` after the spec (§7.6). No feature package declares a raw
+/// `Color` or `TextStyle` — a status means the same colour in every chart, chip
+/// and calendar in the product.
+class HufzTokens {
+  HufzTokens._();
 
-  static const Color primary = Color(0xFF0F6E4F);
-  static const Color primaryDark = Color(0xFF0A4E38);
+  static const Color primary = Color(0xFF0F5132);
+  static const Color primarySoft = Color(0xFFE7F1EC);
+  static const Color primaryDark = Color(0xFF0A3D26);
   static const Color primaryLight = Color(0xFF3D9B78);
 
   static const Color accent = Color(0xFFC9A227);
+
+  /// Hifz semantics — the same colour in every chart, chip and calendar.
+  static const Color sabaq = Color(0xFF0F5132);
+  static const Color sabqi = Color(0xFF2F7FBF);
+  static const Color manzil = Color(0xFF7A4FBF);
+  static const Color doura = Color(0xFFC9A227);
+
+  static const List<double> spacing = [4, 8, 12, 16, 24, 32, 48];
+  static const ({double sm, double md, double lg, double pill}) radius = (
+    sm: 8,
+    md: 12,
+    lg: 20,
+    pill: 999,
+  );
   static const Color accentDark = Color(0xFF8F7318);
 
   static const Color success = Color(0xFF1E8E3E);
   static const Color warning = Color(0xFFB26B00);
-  static const Color danger = Color(0xFFC5221F);
+  static const Color danger = Color(0xFFB3261E);
   static const Color info = Color(0xFF1A73E8);
 
   /// Attendance states, reused by the roster chips, the calendar and charts so
@@ -70,3 +90,6 @@ class AppColors {
     outline: Color(0xFF8D9289),
   );
 }
+
+/// Backwards-compatible alias. `HufzTokens` is the name the spec uses.
+typedef AppColors = HufzTokens;

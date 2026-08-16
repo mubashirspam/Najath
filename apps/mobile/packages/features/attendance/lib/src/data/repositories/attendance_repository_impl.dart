@@ -1,168 +1,212 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:najath_core/najath_core.dart';
 import 'package:najath_local_db/najath_local_db.dart';
 import 'package:najath_network/najath_network.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../domain/entities/attendance.dart';
 import '../../domain/repositories/attendance_repository.dart';
-import '../data_sources/attendance_sources.dart';
-import '../models/attendance_dtos.dart';
+import '../datasources/attendance_remote_datasource.dart';
+import '../dto/attendance_dto.dart';
+import '../mappers/attendance_mapper.dart';
+
+const _uuid = Uuid();
 
 /// Offline-first attendance.
 ///
-/// Reads serve the cache first and fall back to the network on a miss. Writes
-/// go the other way round — cache first, always, then the outbox — because a
-/// teacher taking roll in a hall with no signal cannot be asked to wait.
+/// Reads stream from SQLite, always. Writes commit to SQLite first and queue
+/// the request — a teacher taking roll in a hall with no signal cannot be asked
+/// to wait, and must not lose the mark if the app is killed.
 class AttendanceRepositoryImpl implements AttendanceRepository {
   AttendanceRepositoryImpl({
-    required AttendanceRemoteSource remote,
-    required AttendanceLocalSource local,
+    required AttendanceRemoteDataSource remote,
+    required AttendanceDao dao,
     required OutboxStore outbox,
     required bool Function() isOnline,
   }) : _remote = remote,
-       _local = local,
+       _dao = dao,
        _outbox = outbox,
        _isOnline = isOnline;
 
-  final AttendanceRemoteSource _remote;
-  final AttendanceLocalSource _local;
+  final AttendanceRemoteDataSource _remote;
+  final AttendanceDao _dao;
   final OutboxStore _outbox;
   final bool Function() _isOnline;
 
+  static const _entity = 'attendance';
+
   @override
-  Future<ApiResponse<List<AttendanceSession>>> sessions({
-    String? classId,
-    bool forceRefresh = false,
-  }) async {
-    if (!forceRefresh) {
-      final cached = await _local.sessions();
-      if (cached.isNotEmpty) {
-        // Warm the cache in the background so the next open is current, but
-        // return what we already have immediately.
-        if (_isOnline()) unawaited(_refreshSessions(classId));
-        return ApiResponse.completed(
-          cached.map((dto) => dto.toEntity()).toList(),
-        );
-      }
-    }
-
-    if (!_isOnline()) {
-      return ApiResponse.error(ApiError.unavailableOffline());
-    }
-
-    final res = await _remote.fetchSessions(classId: classId);
-    if (!res.hasData) return res.castError<List<AttendanceSession>>();
-
-    await _local.saveSessions(res.data!);
-    return ApiResponse.completed(
-      res.data!.map((dto) => dto.toEntity()).toList(),
+  Stream<List<AttendanceEntry>> watchRoster({
+    required String batchId,
+    required String date,
+    required AttendanceSession session,
+  }) {
+    final roster = _dao.watchBatchRoster(
+      batchId: batchId,
+      date: date,
+      session: session.wire,
     );
+    final pending = _outbox.watchPendingIds(_entity);
+
+    // Two streams because they change independently: a mark repaints the
+    // roster, and the outbox draining repaints only the "will send" markers.
+    return _combine(roster, pending);
   }
 
-  @override
-  Future<ApiResponse<List<AttendanceMark>>> marks(
-    String sessionId, {
-    bool forceRefresh = false,
-  }) async {
-    if (!forceRefresh && await _local.hasMarks(sessionId)) {
-      final cached = await _local.marks(sessionId);
-      return ApiResponse.completed(await _withPendingFlags(sessionId, cached));
+  Stream<List<AttendanceEntry>> _combine(
+    Stream<List<RosterRow>> roster,
+    Stream<Set<String>> pending,
+  ) async* {
+    var pendingIds = <String>{};
+    await for (final rows in _merge(roster, pending, (ids) => pendingIds = ids)) {
+      yield rows
+          .map(
+            (row) => AttendanceMapper.fromRosterRow(
+              row,
+              isPending: row.record != null && pendingIds.contains(row.record!.id),
+            ),
+          )
+          .toList();
     }
-
-    if (!_isOnline()) {
-      return ApiResponse.error(ApiError.unavailableOffline());
-    }
-
-    final res = await _remote.fetchMarks(sessionId);
-    if (!res.hasData) return res.castError<List<AttendanceMark>>();
-
-    // Do not let a refresh clobber marks still sitting in the outbox: the
-    // server's copy is older than the teacher's unsent correction.
-    final pendingIds = await _pendingStudentIds(sessionId);
-    final incoming = res.data!;
-    if (pendingIds.isEmpty) {
-      await _local.saveMarks(sessionId, incoming);
-    } else {
-      final local = await _local.marks(sessionId);
-      final localById = {for (final m in local) m.studentId: m};
-      await _local.saveMarks(sessionId, [
-        for (final mark in incoming)
-          if (pendingIds.contains(mark.studentId)) localById[mark.studentId] ?? mark else mark,
-      ]);
-    }
-
-    final merged = await _local.marks(sessionId);
-    return ApiResponse.completed(await _withPendingFlags(sessionId, merged));
   }
 
-  @override
-  Stream<List<AttendanceMark>> watchMarks(String sessionId) {
-    return _local.watchMarks(sessionId).asyncMap((dtos) async {
-      return _withPendingFlags(sessionId, dtos);
-    });
-  }
+  /// Emits the roster whenever either source changes, keeping the latest of
+  /// each. Hand-rolled rather than pulling in rxdart for one combine.
+  Stream<List<RosterRow>> _merge(
+    Stream<List<RosterRow>> roster,
+    Stream<Set<String>> pending,
+    void Function(Set<String>) onPending,
+  ) {
+    final controller = StreamController<List<RosterRow>>();
+    List<RosterRow>? latest;
 
-  @override
-  Future<void> markStudent({
-    required String sessionId,
-    required String studentId,
-    required String studentName,
-    required AttendanceStatus status,
-    String? note,
-  }) async {
-    final dto = AttendanceMarkDto(
-      sessionId: sessionId,
-      studentId: studentId,
-      studentName: studentName,
-      status: status.name,
-      note: note,
-    );
+    final rosterSub = roster.listen((rows) {
+      latest = rows;
+      controller.add(rows);
+    }, onError: controller.addError);
 
-    // Local first — the roster repaints on the next frame either way.
-    await _local.upsertMark(dto);
+    final pendingSub = pending.listen((ids) {
+      onPending(ids);
+      if (latest != null) controller.add(latest!);
+    }, onError: controller.addError);
 
-    // One queue entry per student per session: correcting a mark three times
-    // offline must still send one request, carrying the final answer.
-    await _outbox.enqueue(
-      endpoint: ApiEndpoints.attendanceMarks(sessionId),
-      method: 'POST',
-      payload: dto.toJson(),
-      module: 'attendance',
-      dedupeKey: 'attendance:$sessionId:$studentId',
-      label: '$studentName — ${status.label}',
-    );
-  }
-
-  Future<void> _refreshSessions(String? classId) async {
-    final res = await _remote.fetchSessions(classId: classId);
-    if (res.hasData) await _local.saveSessions(res.data!);
-  }
-
-  Future<Set<String>> _pendingStudentIds(String sessionId) async {
-    final queued = await _outbox.due(limit: 500);
-    final prefix = 'attendance:$sessionId:';
-    return {
-      for (final write in queued)
-        if (write.dedupeKey != null && write.dedupeKey!.startsWith(prefix))
-          write.dedupeKey!.substring(prefix.length),
+    controller.onCancel = () async {
+      await rosterSub.cancel();
+      await pendingSub.cancel();
     };
+
+    return controller.stream;
   }
 
-  Future<List<AttendanceMark>> _withPendingFlags(
-    String sessionId,
-    List<AttendanceMarkDto> dtos,
-  ) async {
-    final pending = await _pendingStudentIds(sessionId);
-    return dtos.map((dto) => dto.toEntity(isPending: pending.contains(dto.studentId))).toList();
+  @override
+  Future<Result<void>> refreshRoster({
+    required String batchId,
+    required String date,
+    required AttendanceSession session,
+  }) async {
+    if (!_isOnline()) return fail(const Failure.unavailableOffline());
+
+    final result = await _remote.fetchRoster(
+      batchId: batchId,
+      date: date,
+      session: session.wire,
+    );
+
+    final failure = result.failureOrNull;
+    if (failure != null) return fail(failure);
+
+    await _dao.mergeFromServer(
+      result.valueOrNull!.marks
+          .map((dto) => AttendanceMapper.toCompanion(dto, isPending: false))
+          .toList(),
+    );
+    return ok(null);
+  }
+
+  @override
+  Future<Result<void>> mark({
+    required String batchId,
+    required String enrollmentId,
+    required String date,
+    required AttendanceSession session,
+    required AttendanceStatus status,
+    int? minutesLate,
+    String? remark,
+  }) async {
+    // Client-generated UUID v7. The server accepts it, so there is no temp-id
+    // remapping — which is where offline sync usually goes wrong.
+    final id = _uuid.v7();
+
+    final dto = AttendanceMarkDto(
+      id: id,
+      enrollmentId: enrollmentId,
+      attendanceDate: date,
+      session: session.wire,
+      status: status.wire,
+      markedAt: DateTime.now().toUtc(),
+      minutesLate: minutesLate,
+      remark: remark,
+    );
+
+    // Local first. The roster repaints on the next frame either way.
+    await _dao.upsertMark(AttendanceMapper.toCompanion(dto, isPending: true));
+
+    // Keyed on the natural key, not the row id: correcting the same student
+    // three times offline replaces the queued entry rather than queueing three
+    // requests, and the last answer wins.
+    await _outbox.enqueue(
+      id: id,
+      entity: _entity,
+      operation: 'create',
+      endpoint: ApiEndpoints.attendanceBatch,
+      payload: {
+        'marks': [dto.toJson()],
+      },
+      idempotencyKey: _idempotencyKey(enrollmentId, date, session.wire),
+      label: status.name,
+    );
+
+    return ok(null);
+  }
+
+  /// `sha256(entity + naturalKey)`, per the sync rules.
+  ///
+  /// The natural key is `(enrollment, date, session)` — the thing that can only
+  /// have one current value — so a retry of a *correction* dedupes against the
+  /// original rather than creating a second row.
+  String _idempotencyKey(String enrollmentId, String date, String session) {
+    final input = '$_entity:$enrollmentId:$date:$session';
+    return sha256.convert(utf8.encode(input)).toString();
+  }
+
+  @override
+  Future<Result<List<AttendanceEntry>>> history({
+    required String enrollmentId,
+    required String date,
+  }) async {
+    final records = await _dao.historyFor(enrollmentId: enrollmentId, date: date);
+    return ok(
+      records
+          .map(
+            (r) => AttendanceMapper.fromRecord(
+              r,
+              studentId: '',
+              studentName: '',
+            ),
+          )
+          .toList(),
+    );
   }
 }
 
 final attendanceRepositoryProvider = Provider<AttendanceRepository>((ref) {
   return AttendanceRepositoryImpl(
-    remote: ref.watch(attendanceRemoteSourceProvider),
-    local: ref.watch(attendanceLocalSourceProvider),
+    remote: ref.watch(attendanceRemoteDataSourceProvider),
+    dao: ref.watch(attendanceDaoProvider),
     outbox: ref.watch(outboxStoreProvider),
     isOnline: () => ref.read(isOnlineProvider),
   );

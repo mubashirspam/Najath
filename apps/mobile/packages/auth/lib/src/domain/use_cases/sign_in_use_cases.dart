@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:najath_network/najath_network.dart';
+import 'package:najath_core/najath_core.dart';
 
 import '../../data/repositories/auth_repository_impl.dart';
 import '../entities/app_user.dart';
@@ -11,7 +11,7 @@ class SignInWithEmailUseCase {
 
   final AuthRepository _repository;
 
-  Future<ApiResponse<AppUser>> call({
+  Future<Result<AppUser>> call({
     required String email,
     required String password,
     bool rememberMe = false,
@@ -20,7 +20,7 @@ class SignInWithEmailUseCase {
       email: email.trim(),
       password: password,
     );
-    if (result.hasData) {
+    if (result.isOk) {
       await _repository.saveRememberMe(
         remember: rememberMe,
         identifier: email.trim(),
@@ -36,7 +36,7 @@ class RequestPhoneOtpUseCase {
 
   final AuthRepository _repository;
 
-  Future<ApiResponse<void>> call(String phoneNumber) =>
+  Future<Result<void>> call(String phoneNumber) =>
       _repository.requestPhoneOtp(_normalise(phoneNumber));
 }
 
@@ -46,7 +46,7 @@ class VerifyPhoneOtpUseCase {
 
   final AuthRepository _repository;
 
-  Future<ApiResponse<AppUser>> call({
+  Future<Result<AppUser>> call({
     required String phoneNumber,
     required String code,
     bool rememberMe = false,
@@ -56,7 +56,7 @@ class VerifyPhoneOtpUseCase {
       phoneNumber: normalised,
       code: code.trim(),
     );
-    if (result.hasData) {
+    if (result.isOk) {
       await _repository.saveRememberMe(
         remember: rememberMe,
         identifier: normalised,

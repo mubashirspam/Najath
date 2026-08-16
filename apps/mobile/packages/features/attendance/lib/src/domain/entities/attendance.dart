@@ -2,89 +2,165 @@ import 'package:flutter/foundation.dart';
 
 /// How a student was recorded for one session.
 enum AttendanceStatus {
-  present,
-  absent,
-  late,
-  excused;
+  present('PRESENT'),
+  absent('ABSENT'),
+  late('LATE'),
+  leave('LEAVE'),
+  halfDay('HALF_DAY'),
+  excused('EXCUSED');
 
-  static AttendanceStatus fromName(String? name) {
-    return AttendanceStatus.values.firstWhere(
-      (s) => s.name == name,
-      orElse: () => AttendanceStatus.absent,
-    );
-  }
+  const AttendanceStatus(this.wire);
 
-  String get label => switch (this) {
-    AttendanceStatus.present => 'Present',
-    AttendanceStatus.absent => 'Absent',
-    AttendanceStatus.late => 'Late',
-    AttendanceStatus.excused => 'Excused',
-  };
+  final String wire;
+
+  static AttendanceStatus fromWire(String? wire) => AttendanceStatus.values.firstWhere(
+    (s) => s.wire == wire,
+    orElse: () => AttendanceStatus.absent,
+  );
+
+  /// The four a teacher toggles between on a roster. `LEAVE` is applied by the
+  /// leave module and `HALF_DAY` is derived from a late threshold, so neither
+  /// is a button.
+  static const List<AttendanceStatus> markable = [
+    AttendanceStatus.present,
+    AttendanceStatus.late,
+    AttendanceStatus.absent,
+    AttendanceStatus.excused,
+  ];
+
+  /// Counts toward the numerator of the attendance percentage. The percentage
+  /// itself is computed server-side — this only decides chip colour.
+  bool get isCredited => this == present || this == late || this == excused || this == leave;
 }
 
-/// One roll-call: a class, on a date, for a period.
-@immutable
-class AttendanceSession {
-  const AttendanceSession({
-    required this.id,
-    required this.classId,
-    required this.className,
-    required this.date,
-    required this.period,
-    required this.markedCount,
-    required this.studentCount,
-    this.isFinalised = false,
-  });
+/// Which part of the day a mark covers. Set by the department's attendance
+/// mode, not chosen per student.
+enum AttendanceSession {
+  fullDay('FULL_DAY'),
+  forenoon('FORENOON'),
+  afternoon('AFTERNOON'),
+  period('PERIOD');
 
-  final String id;
-  final String classId;
-  final String className;
-  final DateTime date;
-  final String period;
-  final int markedCount;
-  final int studentCount;
+  const AttendanceSession(this.wire);
 
-  /// Once the office finalises a session it can only be changed by someone
-  /// holding `attendance:amend`.
-  final bool isFinalised;
+  final String wire;
 
-  bool get isComplete => studentCount > 0 && markedCount >= studentCount;
-
-  double get completion => studentCount == 0 ? 0 : (markedCount / studentCount).clamp(0.0, 1.0);
+  static AttendanceSession fromWire(String? wire) => AttendanceSession.values.firstWhere(
+    (s) => s.wire == wire,
+    orElse: () => AttendanceSession.fullDay,
+  );
 }
 
-/// One student's status within a session.
+/// One student's row on a roster.
+///
+/// Enrollment-scoped, not student-scoped: a student in Hifz and General
+/// Education is marked twice a day and the two are unrelated.
 @immutable
-class AttendanceMark {
-  const AttendanceMark({
+class AttendanceEntry {
+  const AttendanceEntry({
+    required this.enrollmentId,
     required this.studentId,
     required this.studentName,
     required this.status,
-    this.note,
+    this.rollNo,
+    this.minutesLate,
+    this.remark,
+    this.isMarked = false,
     this.isPending = false,
+    this.isCorrection = false,
   });
 
+  final String enrollmentId;
   final String studentId;
   final String studentName;
-  final AttendanceStatus status;
-  final String? note;
+  final String? rollNo;
 
-  /// True while the change is sitting in the outbox. The roster shows these
-  /// with a "will send" marker so a teacher can tell saved-locally from
-  /// saved-for-real.
+  /// Defaults to [AttendanceStatus.present] for an unmarked student — the fast
+  /// path is marking only the absentees.
+  final AttendanceStatus status;
+
+  final int? minutesLate;
+  final String? remark;
+
+  /// False until a mark exists. Drives the "N of M marked" counter.
+  final bool isMarked;
+
+  /// True while the mark is still in the outbox. The roster shows this so a
+  /// teacher can tell saved-here from saved-on-the-server.
   final bool isPending;
 
-  AttendanceMark copyWith({
+  /// This row supersedes an earlier mark for the same session.
+  final bool isCorrection;
+
+  AttendanceEntry copyWith({
     AttendanceStatus? status,
-    String? note,
+    int? minutesLate,
+    String? remark,
+    bool? isMarked,
     bool? isPending,
   }) {
-    return AttendanceMark(
+    return AttendanceEntry(
+      enrollmentId: enrollmentId,
       studentId: studentId,
       studentName: studentName,
+      rollNo: rollNo,
       status: status ?? this.status,
-      note: note ?? this.note,
+      minutesLate: minutesLate ?? this.minutesLate,
+      remark: remark ?? this.remark,
+      isMarked: isMarked ?? this.isMarked,
       isPending: isPending ?? this.isPending,
+      isCorrection: isCorrection,
     );
   }
+}
+
+/// The tallies the sticky footer shows, computed once per rebuild rather than
+/// three times in the widget tree.
+@immutable
+class RosterTally {
+  const RosterTally({
+    required this.present,
+    required this.absent,
+    required this.late,
+    required this.marked,
+    required this.total,
+  });
+
+  factory RosterTally.of(List<AttendanceEntry> entries) {
+    var present = 0;
+    var absent = 0;
+    var late = 0;
+    var marked = 0;
+
+    for (final entry in entries) {
+      if (entry.isMarked) marked++;
+      switch (entry.status) {
+        case AttendanceStatus.present:
+        case AttendanceStatus.excused:
+        case AttendanceStatus.leave:
+          present++;
+        case AttendanceStatus.late:
+          late++;
+        case AttendanceStatus.absent:
+        case AttendanceStatus.halfDay:
+          absent++;
+      }
+    }
+
+    return RosterTally(
+      present: present,
+      absent: absent,
+      late: late,
+      marked: marked,
+      total: entries.length,
+    );
+  }
+
+  final int present;
+  final int absent;
+  final int late;
+  final int marked;
+  final int total;
+
+  bool get isComplete => total > 0 && marked >= total;
 }

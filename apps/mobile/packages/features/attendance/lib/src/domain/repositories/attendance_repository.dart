@@ -1,32 +1,47 @@
-import 'package:najath_network/najath_network.dart';
+import 'package:najath_core/najath_core.dart';
 
 import '../entities/attendance.dart';
 
 abstract class AttendanceRepository {
-  /// Sessions, cache-first. [forceRefresh] skips the cache when the user pulls
-  /// to refresh.
-  Future<ApiResponse<List<AttendanceSession>>> sessions({
-    String? classId,
-    bool forceRefresh = false,
+  /// The roster, streamed from the **local database**.
+  ///
+  /// A stream and not a future: the UI has exactly one data path. A sync pass,
+  /// an outbox drain and this device's own optimistic writes all land in
+  /// SQLite, and SQLite pushes to the screen. Offline correctness is then a
+  /// property of the architecture rather than something each screen remembers.
+  Stream<List<AttendanceEntry>> watchRoster({
+    required String batchId,
+    required String date,
+    required AttendanceSession session,
   });
 
-  /// A session's roster, cache-first.
-  Future<ApiResponse<List<AttendanceMark>>> marks(
-    String sessionId, {
-    bool forceRefresh = false,
+  /// Pulls the server's copy into the mirror. Failures are returned, not
+  /// thrown — a roster with no network still renders from cache.
+  Future<Result<void>> refreshRoster({
+    required String batchId,
+    required String date,
+    required AttendanceSession session,
   });
 
-  /// Live roster, repainted whenever the cache changes — from a sync pass or
-  /// from this device's own optimistic writes.
-  Stream<List<AttendanceMark>> watchMarks(String sessionId);
-
-  /// Records a status. Writes the cache immediately and queues the request, so
-  /// the caller never waits on the network and never loses the mark.
-  Future<void> markStudent({
-    required String sessionId,
-    required String studentId,
-    required String studentName,
+  /// Records a mark.
+  ///
+  /// Commits locally and queues the request. Returns as soon as the local write
+  /// lands, which is what makes the roster usable in a hall with no signal.
+  Future<Result<void>> mark({
+    required String batchId,
+    required String enrollmentId,
+    required String date,
+    required AttendanceSession session,
     required AttendanceStatus status,
-    String? note,
+    int? minutesLate,
+    String? remark,
+  });
+
+  /// Every correction ever made to one student on one date, oldest first.
+  ///
+  /// A product feature: a guardian disputing a mark is shown what changed.
+  Future<Result<List<AttendanceEntry>>> history({
+    required String enrollmentId,
+    required String date,
   });
 }

@@ -7,10 +7,9 @@ import 'package:najath_core/najath_core.dart';
 import 'package:najath_local_db/najath_local_db.dart';
 import 'package:najath_network/najath_network.dart';
 
-import 'sync_state_store.dart';
 import 'sync_task.dart';
 
-/// Stage the engine is currently in. Drives the banner on the dashboard.
+/// Stage the engine is in. Drives the banner on the shell.
 enum SyncPhase { idle, uploading, downloading, done, failed }
 
 @immutable
@@ -21,23 +20,15 @@ class SyncProgress {
     this.total = 0,
     this.label,
     this.pendingWrites = 0,
-    this.lastError,
+    this.lastFailure,
   });
 
   final SyncPhase phase;
-
-  /// Items finished / total in the current phase. `total == 0` means the phase
-  /// cannot be counted and the banner should show an indeterminate bar.
   final int done;
   final int total;
-
-  /// What is being worked on right now, when known.
   final String? label;
-
-  /// Writes still queued after the last upload attempt.
   final int pendingWrites;
-
-  final String? lastError;
+  final Failure? lastFailure;
 
   bool get isActive => phase == SyncPhase.uploading || phase == SyncPhase.downloading;
 
@@ -49,7 +40,7 @@ class SyncProgress {
     int? total,
     String? label,
     int? pendingWrites,
-    String? lastError,
+    Failure? lastFailure,
   }) {
     return SyncProgress(
       phase: phase ?? this.phase,
@@ -57,7 +48,7 @@ class SyncProgress {
       total: total ?? this.total,
       label: label ?? this.label,
       pendingWrites: pendingWrites ?? this.pendingWrites,
-      lastError: lastError ?? this.lastError,
+      lastFailure: lastFailure ?? this.lastFailure,
     );
   }
 }
@@ -65,17 +56,16 @@ class SyncProgress {
 /// The app's single background orchestrator.
 ///
 /// Once sync is *possible* — a transport plus a live session — a pass runs an
-/// ordered, paced pipeline entirely in the background:
+/// ordered, paced pipeline in the background:
 ///
-///   1. **Upload.** Drain the outbox, oldest first. Always first: a teacher's
-///      unsent attendance must reach the server before anything overwrites the
-///      cache it came from.
+///   1. **Upload.** Drain the outbox, FIFO per entity. Always first: a
+///      teacher's unsent mark must reach the server before a download
+///      overwrites the row it came from.
 ///   2. **Download.** Every registered [SyncTask] in `order`, paced so the
 ///      foreground always wins the connection.
 ///
-/// A pass is re-entrancy guarded, losing connectivity cancels the in-flight
-/// request and stops the pass, and one-time tasks resume from their markers on
-/// the next trigger.
+/// A pass is re-entrancy guarded; losing connectivity cancels the in-flight
+/// request and stops the pass; one-time tasks resume from their markers.
 class SyncEngine extends Notifier<SyncProgress> {
   bool _running = false;
   CancelToken _cancelToken = CancelToken();
@@ -83,23 +73,19 @@ class SyncEngine extends Notifier<SyncProgress> {
   @override
   SyncProgress build() => const SyncProgress();
 
-  /// A transport plus a session. Checked before every pass, and again before
-  /// each upload, because connectivity can drop mid-pass.
+  /// A transport plus a session.
   Future<bool> canSync() async {
     if (!ref.read(isOnlineProvider)) return false;
     final token = await ref.read(tokenStorageProvider).getToken();
     return token != null && token.isNotEmpty;
   }
 
-  /// Stops the current pass. Called when connectivity drops.
   void cancel() {
-    if (!_cancelToken.isCancelled) {
-      _cancelToken.cancel('connectivity lost');
-    }
+    if (!_cancelToken.isCancelled) _cancelToken.cancel('connectivity lost');
   }
 
-  /// Runs one full pass. Safe to call repeatedly — overlapping calls coalesce
-  /// into the single in-flight pass rather than queueing.
+  /// Runs one full pass. Overlapping calls coalesce into the in-flight pass
+  /// rather than queueing.
   Future<void> run() async {
     if (_running) return;
     if (!await canSync()) return;
@@ -117,89 +103,124 @@ class SyncEngine extends Notifier<SyncProgress> {
           phase: SyncPhase.done,
           pendingWrites: await ref.read(outboxStoreProvider).pendingCount(),
         );
-        // Let the confirmation linger, then fall back to idle so the banner
-        // does not sit on screen for the rest of the session.
-        Future<void>.delayed(AppDurations.syncDoneLinger, () {
-          if (state.phase == SyncPhase.done) {
-            state = const SyncProgress();
-          }
-        });
+        unawaited(
+          Future<void>.delayed(AppDurations.syncDoneLinger, () {
+            if (state.phase == SyncPhase.done) state = const SyncProgress();
+          }),
+        );
       }
     } finally {
       _running = false;
     }
   }
 
-  // --- phase 1: upload -----------------------------------------------------
+  // ── phase 1: upload ────────────────────────────────────────────────────────
 
-  /// Drains the outbox in creation order.
+  /// Drains each entity's queue in creation order.
   ///
-  /// Order matters and the queue is not parallelised: a mark created then
-  /// amended must reach the server in that sequence, or the amendment loses.
+  /// FIFO **per entity**: a mark created then amended must reach the server in
+  /// that sequence or the amendment loses. Across entities order does not
+  /// matter and serialising them would only slow the pass down.
   Future<void> _uploadPhase() async {
     final outbox = ref.read(outboxStoreProvider);
     final client = ref.read(dioClientProvider);
 
-    final due = await outbox.due();
-    if (due.isEmpty) return;
+    final entities = await outbox.pendingEntities();
+    if (entities.isEmpty) return;
 
+    final queued = await outbox.pendingCount();
     state = state.copyWith(
       phase: SyncPhase.uploading,
       done: 0,
-      total: due.length,
-      pendingWrites: due.length,
+      total: queued,
+      pendingWrites: queued,
     );
 
     var sent = 0;
-    for (final write in due) {
+
+    for (final entity in entities) {
       if (_cancelToken.isCancelled) break;
-      if (!await canSync()) break;
 
-      state = state.copyWith(done: sent, label: write.label ?? write.module);
+      for (final write in await outbox.dueFor(entity)) {
+        if (_cancelToken.isCancelled) break;
+        if (!await canSync()) return;
 
-      final response = await client.request<void>(
-        endpoint: write.endpoint,
-        method: _methodOf(write.method),
-        data: write.payload,
-        cancelToken: _cancelToken,
-        mapper: (_) {},
-      );
+        state = state.copyWith(done: sent, label: write.label ?? write.entity);
 
-      if (response.isCompleted) {
-        await outbox.markSent(write.id);
-        sent++;
-        state = state.copyWith(done: sent);
-      } else {
-        final error = response.error!;
-        if (error.isRetryable) {
-          await outbox.markRetryable(write.id, error.message, write.attempts);
-          // A retryable failure is almost always the network going away
-          // mid-drain. Stop rather than burning through the queue marking
-          // everything failed.
-          break;
+        final result = await client.request<void>(
+          endpoint: write.endpoint,
+          method: _methodOf(write.operation),
+          data: write.payload,
+          idempotencyKey: write.idempotencyKey,
+          cancelToken: _cancelToken,
+          decode: (_) {},
+        );
+
+        final stop = await result.fold(
+          (failure) async {
+            if (failure is UnauthorizedFailure) {
+              // The queue is never dropped on a 401. The auth layer refreshes
+              // and the next trigger resumes exactly here.
+              return true;
+            }
+            if (failure.isRetryable) {
+              await outbox.markRetryable(write.id, failure.code, write.attempts);
+              // Almost always the network going away mid-drain. Stop rather
+              // than burning through the queue marking everything failed.
+              return true;
+            }
+            // Validation, permission, conflict: retrying sends the same bytes
+            // and gets the same answer. Park it where the user can see it.
+            await outbox.markBlocked(write.id, failure.code);
+            state = state.copyWith(lastFailure: failure);
+            return false;
+          },
+          (_) async {
+            await outbox.markSent(write.id);
+            await _clearPendingFlag(entity, write.id);
+            sent++;
+            state = state.copyWith(done: sent);
+            return false;
+          },
+        );
+
+        if (stop) {
+          state = state.copyWith(pendingWrites: await outbox.pendingCount());
+          return;
         }
-        // Validation, permission, conflict: retrying sends the same bytes and
-        // gets the same answer. Park it where the user can see it.
-        await outbox.markBlocked(write.id, error.message);
-      }
 
-      await Future<void>.delayed(AppDurations.syncPaceGap);
+        await Future<void>.delayed(AppDurations.syncPaceGap);
+      }
     }
 
     state = state.copyWith(pendingWrites: await outbox.pendingCount());
   }
 
-  // --- phase 2: download ---------------------------------------------------
+  /// Clears the row's "will send" marker once the server has it.
+  ///
+  /// The engine knows entity names but not their tables, so this is the one
+  /// place it maps between them. A new entity that forgets to register here
+  /// keeps a stale marker — visible, not silent.
+  Future<void> _clearPendingFlag(String entity, String id) async {
+    switch (entity) {
+      case 'attendance':
+        await ref.read(attendanceDaoProvider).clearPendingFlag(id);
+      default:
+        break;
+    }
+  }
+
+  // ── phase 2: download ──────────────────────────────────────────────────────
 
   Future<void> _downloadPhase() async {
     final tasks = [...ref.read(syncTasksProvider)]..sort((a, b) => a.order.compareTo(b.order));
     if (tasks.isEmpty) return;
 
-    final markers = ref.read(syncStateStoreProvider);
+    final cursors = ref.read(syncCursorStoreProvider);
 
     final pending = <SyncTask>[];
     for (final task in tasks) {
-      if (task.isOneTime && await markers.isDone(task.id)) continue;
+      if (task.isOneTime && await cursors.isDone(task.id)) continue;
       pending.add(task);
     }
     if (pending.isEmpty) return;
@@ -217,14 +238,19 @@ class SyncEngine extends Notifier<SyncProgress> {
 
       state = state.copyWith(done: completed, label: task.label);
 
-      try {
-        await task.run(ref, _cancelToken);
-        if (task.isOneTime) await markers.markDone(task.id);
-      } on Object catch (e) {
-        // One failing module must not abort the pass — the others still have
-        // work worth doing, and this task retries on the next trigger.
-        state = state.copyWith(lastError: '${task.label}: $e');
-      }
+      final result = await task.run(ref, _cancelToken);
+
+      await result.fold(
+        (failure) async {
+          // One failing module must not abort the pass — the others still have
+          // work worth doing, and this task retries on the next trigger.
+          state = state.copyWith(lastFailure: failure);
+        },
+        (serverTime) async {
+          if (serverTime != null) await cursors.setCursor(task.entity, serverTime);
+          if (task.isOneTime) await cursors.markDone(task.id);
+        },
+      );
 
       completed++;
       state = state.copyWith(done: completed);
@@ -232,12 +258,10 @@ class SyncEngine extends Notifier<SyncProgress> {
     }
   }
 
-  HttpMethod _methodOf(String method) => switch (method.toUpperCase()) {
-    'POST' => HttpMethod.post,
-    'PUT' => HttpMethod.put,
-    'PATCH' => HttpMethod.patch,
-    'DELETE' => HttpMethod.delete,
-    _ => HttpMethod.get,
+  HttpMethod _methodOf(String operation) => switch (operation) {
+    'update' => HttpMethod.patch,
+    'void' => HttpMethod.delete,
+    _ => HttpMethod.post,
   };
 }
 
@@ -247,9 +271,6 @@ final syncEngineProvider = NotifierProvider<SyncEngine, SyncProgress>(
 
 /// Watched once by the app shell to keep background sync triggered for the
 /// whole session.
-///
-/// Re-runs a pass when connectivity returns and when a write is queued while
-/// online; cancels the in-flight pass when connectivity drops.
 final syncKeepAliveProvider = Provider<void>((ref) {
   ref
     ..listen<bool>(isOnlineProvider, (wasOnline, isOnline) {

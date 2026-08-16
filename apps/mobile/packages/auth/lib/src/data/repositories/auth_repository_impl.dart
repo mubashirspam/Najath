@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:najath_core/najath_core.dart';
-import 'package:najath_network/najath_network.dart';
 
 import '../../domain/entities/app_user.dart';
 import '../../domain/repositories/auth_repository.dart';
@@ -18,7 +17,7 @@ class AuthRepositoryImpl implements AuthRepository {
   final TokenStorage _storage;
 
   @override
-  Future<ApiResponse<AppUser>> signInWithEmail({
+  Future<Result<AppUser>> signInWithEmail({
     required String email,
     required String password,
   }) async {
@@ -27,11 +26,10 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<ApiResponse<void>> requestPhoneOtp(String phoneNumber) =>
-      _remote.requestPhoneOtp(phoneNumber);
+  Future<Result<void>> requestPhoneOtp(String phoneNumber) => _remote.requestPhoneOtp(phoneNumber);
 
   @override
-  Future<ApiResponse<AppUser>> verifyPhoneOtp({
+  Future<Result<AppUser>> verifyPhoneOtp({
     required String phoneNumber,
     required String code,
   }) async {
@@ -43,14 +41,15 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<ApiResponse<AppUser>> currentSession() async {
+  Future<Result<AppUser>> currentSession() async {
     final res = await _remote.session();
-    if (!res.hasData) return res.castError<AppUser>();
+    final failure = res.failureOrNull;
+    if (failure != null) return fail(failure);
 
-    final dto = res.data!;
+    final dto = res.valueOrNull!;
     await _storage.saveUserId(dto.id);
     await _storage.saveUserJson(dto.toJson());
-    return ApiResponse<AppUser>.completed(dto.toEntity());
+    return ok(dto.toEntity());
   }
 
   @override
@@ -84,14 +83,15 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<String?> savedIdentifier() => _storage.getSavedIdentifier();
 
-  Future<ApiResponse<AppUser>> _persist(ApiResponse<SignInResult> res) async {
-    if (!res.hasData) return res.castError<AppUser>();
+  Future<Result<AppUser>> _persist(Result<SignInResult> res) async {
+    final failure = res.failureOrNull;
+    if (failure != null) return fail(failure);
 
-    final result = res.data!;
+    final result = res.valueOrNull!;
     await _storage.saveToken(result.token);
     await _storage.saveUserId(result.user.id);
     await _storage.saveUserJson(result.user.toJson());
-    return ApiResponse<AppUser>.completed(result.user.toEntity());
+    return ok(result.user.toEntity());
   }
 }
 

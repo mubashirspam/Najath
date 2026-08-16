@@ -6,7 +6,6 @@ import 'package:najath_auth/najath_auth.dart';
 import 'package:najath_core/najath_core.dart';
 import 'package:najath_design_system/najath_design_system.dart';
 import 'package:najath_local_db/najath_local_db.dart';
-import 'package:najath_sync/najath_sync.dart';
 
 import '../../flavors.dart';
 
@@ -85,8 +84,9 @@ class SettingsScreen extends ConsumerWidget {
             title: const Text('Clear cached data'),
             subtitle: const Text('Keeps anything not yet sent'),
             onTap: () async {
-              await ref.read(cacheStoreProvider).clearDataCaches();
-              await ref.read(syncStateStoreProvider).resetAll();
+              // The outbox is deliberately untouched: unsent work is the
+              // teacher's, not ours to discard.
+              await ref.read(appDatabaseProvider).clearCachedData();
               if (context.mounted) context.showSnack('Cached data cleared');
             },
           ),

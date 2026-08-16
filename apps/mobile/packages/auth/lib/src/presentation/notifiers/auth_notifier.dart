@@ -18,7 +18,8 @@ class AuthState {
   const AuthState._({
     required this.isAuthenticated,
     required this.user,
-    required this.status,
+    required this.isBusy,
+    required this.failure,
     required this.initialized,
     required this.method,
     required this.otpRequested,
@@ -26,55 +27,58 @@ class AuthState {
     required this.savedIdentifier,
   });
 
-  factory AuthState.initial() => const AuthState._(
-    isAuthenticated: false,
-    user: null,
-    status: ApiResponse<AppUser>.initial(),
-    initialized: false,
-    method: SignInMethod.staffPassword,
-    otpRequested: false,
-    rememberMe: false,
-    savedIdentifier: null,
-  );
+  const AuthState.initial()
+    : isAuthenticated = false,
+      user = null,
+      isBusy = false,
+      failure = null,
+      initialized = false,
+      method = SignInMethod.staffPassword,
+      otpRequested = false,
+      rememberMe = false,
+      savedIdentifier = null;
 
   final bool isAuthenticated;
   final AppUser? user;
 
-  /// The in-flight sign-in attempt. Drives the button spinner and the inline
-  /// error, so the login screen needs no local state of its own.
-  final ApiResponse<AppUser> status;
+  /// A sign-in attempt is in flight. Drives the button spinner.
+  final bool isBusy;
+
+  /// The last attempt's failure, or null. The login screen maps it to localized
+  /// copy — the notifier never carries a sentence.
+  final Failure? failure;
 
   /// False while the stored session is being read back. The router holds every
-  /// route on the splash screen until this flips, otherwise a cold start on a
-  /// deep link bounces to login before the token has been read.
+  /// route on splash until this flips, otherwise a cold start on a deep link
+  /// bounces to login before the token has been read.
   final bool initialized;
 
   final SignInMethod method;
 
-  /// A code has been sent and the guardian should now be shown the code field.
+  /// A code has been sent; the guardian should now see the code field.
   final bool otpRequested;
 
   final bool rememberMe;
   final String? savedIdentifier;
 
-  bool get isBusy => status.isLoading;
-  ApiError? get error => status.error;
-
   AuthState copyWith({
     bool? isAuthenticated,
     AppUser? user,
-    ApiResponse<AppUser>? status,
+    bool? isBusy,
+    Failure? failure,
     bool? initialized,
     SignInMethod? method,
     bool? otpRequested,
     bool? rememberMe,
     String? savedIdentifier,
     bool clearUser = false,
+    bool clearFailure = false,
   }) {
     return AuthState._(
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
       user: clearUser ? null : (user ?? this.user),
-      status: status ?? this.status,
+      isBusy: isBusy ?? this.isBusy,
+      failure: clearFailure ? null : (failure ?? this.failure),
       initialized: initialized ?? this.initialized,
       method: method ?? this.method,
       otpRequested: otpRequested ?? this.otpRequested,
@@ -86,10 +90,10 @@ class AuthState {
 
 /// Session state machine.
 ///
-/// A `Notifier` rather than an `AsyncNotifier` because the redirect guard reads
-/// it synchronously and needs the [AuthState.initialized] flag, which an
-/// `AsyncValue` cannot express — "loading" and "not started" are different
-/// answers to the router's question.
+/// A `Notifier`, not an `AsyncNotifier`: the redirect guard reads it
+/// synchronously and needs [AuthState.initialized], which an `AsyncValue`
+/// cannot express — "loading" and "not started" are different answers to the
+/// router's question.
 class AuthNotifier extends Notifier<AuthState> {
   final Completer<void> _initCompleter = Completer<void>();
 
@@ -100,13 +104,13 @@ class AuthNotifier extends Notifier<AuthState> {
   @override
   AuthState build() {
     unawaited(_bootstrap());
-    return AuthState.initial();
+    return const AuthState.initial();
   }
 
   /// Restores the session from storage, then reconciles with the server.
   ///
   /// Offline, the stored session is trusted: the app opens with cached data and
-  /// the cached policy. Only an explicit 401 signs the user out — a failed
+  /// the cached policy. **Only an explicit 401 signs the user out** — a failed
   /// request must never do it, or the app would log people out on the bus.
   Future<void> _bootstrap() async {
     final repository = ref.read(authRepositoryProvider);
@@ -133,10 +137,12 @@ class AuthNotifier extends Notifier<AuthState> {
 
     if (ref.read(isOnlineProvider)) {
       final live = await repository.currentSession();
-      if (live.hasData) {
-        state = state.copyWith(isAuthenticated: true, user: live.data);
+      final user = live.valueOrNull;
+
+      if (user != null) {
+        state = state.copyWith(isAuthenticated: true, user: user);
         await ref.read(accessNotifierProvider.notifier).refresh();
-      } else if (live.error?.isUnauthorized ?? false) {
+      } else if (live.failureOrNull is UnauthorizedFailure) {
         await _clearLocalSession();
         _finishBootstrap(
           state.copyWith(
@@ -164,13 +170,13 @@ class AuthNotifier extends Notifier<AuthState> {
     if (!_initCompleter.isCompleted) _initCompleter.complete();
   }
 
-  // --- sign in -------------------------------------------------------------
+  // ── sign in ────────────────────────────────────────────────────────────────
 
   void setMethod(SignInMethod method) {
     state = state.copyWith(
       method: method,
       otpRequested: false,
-      status: const ApiResponse<AppUser>.initial(),
+      clearFailure: true,
     );
   }
 
@@ -179,7 +185,7 @@ class AuthNotifier extends Notifier<AuthState> {
     required String password,
     bool rememberMe = false,
   }) async {
-    state = state.copyWith(status: const ApiResponse<AppUser>.loading());
+    state = state.copyWith(isBusy: true, clearFailure: true);
 
     final result = await ref
         .read(signInWithEmailUseCaseProvider)
@@ -189,18 +195,16 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   Future<bool> requestOtp(String phoneNumber) async {
-    state = state.copyWith(status: const ApiResponse<AppUser>.loading());
+    state = state.copyWith(isBusy: true, clearFailure: true);
 
     final result = await ref.read(requestPhoneOtpUseCaseProvider).call(phoneNumber);
+    final failure = result.failureOrNull;
 
-    if (result.isError) {
-      state = state.copyWith(status: ApiResponse<AppUser>.error(result.error!));
+    if (failure != null) {
+      state = state.copyWith(isBusy: false, failure: failure);
       return false;
     }
-    state = state.copyWith(
-      status: const ApiResponse<AppUser>.initial(),
-      otpRequested: true,
-    );
+    state = state.copyWith(isBusy: false, otpRequested: true);
     return true;
   }
 
@@ -209,47 +213,45 @@ class AuthNotifier extends Notifier<AuthState> {
     required String code,
     bool rememberMe = false,
   }) async {
-    state = state.copyWith(status: const ApiResponse<AppUser>.loading());
+    state = state.copyWith(isBusy: true, clearFailure: true);
 
     final result = await ref
         .read(verifyPhoneOtpUseCaseProvider)
         .call(phoneNumber: phoneNumber, code: code, rememberMe: rememberMe);
 
-    return _applySignIn(
-      result,
-      rememberMe: rememberMe,
-      identifier: phoneNumber,
-    );
+    return _applySignIn(result, rememberMe: rememberMe, identifier: phoneNumber);
   }
 
   Future<bool> _applySignIn(
-    ApiResponse<AppUser> result, {
+    Result<AppUser> result, {
     required bool rememberMe,
     required String identifier,
   }) async {
-    if (!result.hasData) {
-      state = state.copyWith(status: result);
+    final user = result.valueOrNull;
+
+    if (user == null) {
+      state = state.copyWith(isBusy: false, failure: result.failureOrNull);
       return false;
     }
 
-    final user = result.data!;
     state = state.copyWith(
       isAuthenticated: true,
       user: user,
-      status: result,
+      isBusy: false,
+      clearFailure: true,
       otpRequested: false,
       rememberMe: rememberMe,
       savedIdentifier: rememberMe ? identifier : null,
     );
 
-    // The policy must land before the router lets the user through, otherwise
-    // the first frame after login is computed against deny-all and the redirect
-    // guard bounces them straight back out.
+    // The policy must land before the router lets the user through: the first
+    // frame after login would otherwise be computed against deny-all and the
+    // redirect guard would bounce them straight back out.
     await ref.read(accessNotifierProvider.notifier).load(user.role);
     return true;
   }
 
-  // --- sign out ------------------------------------------------------------
+  // ── sign out ───────────────────────────────────────────────────────────────
 
   Future<void> signOut() async {
     await ref.read(signOutUseCaseProvider).call();
@@ -257,17 +259,17 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   /// Ends the session locally without calling the server. Used when the API has
-  /// already told us the session is gone (401), where a sign-out call would
-  /// just fail again.
+  /// already said the session is gone (401), where a sign-out call would fail
+  /// again with the same answer.
   Future<void> endSessionLocally() => _clearLocalSession();
 
   Future<void> _clearLocalSession() async {
     // Clear the token too: `signOut` already did via the repository, but the
     // 401 path reaches here without it and must not leave a dead bearer token
-    // that the next request would replay.
+    // for the next request to replay.
     await ref.read(tokenStorageProvider).clearSession();
     await ref.read(accessNotifierProvider.notifier).clear();
-    state = AuthState.initial().copyWith(
+    state = const AuthState.initial().copyWith(
       initialized: true,
       rememberMe: state.rememberMe,
       savedIdentifier: state.savedIdentifier,
@@ -279,8 +281,8 @@ final authNotifierProvider = NotifierProvider<AuthNotifier, AuthState>(
   AuthNotifier.new,
 );
 
-/// The signed-in user, or null. Convenience for the many widgets that only need
-/// the identity and not the whole state machine.
+/// The signed-in user, or null. Convenience for the many widgets that need the
+/// identity and not the whole state machine.
 final currentUserProvider = Provider<AppUser?>((ref) {
   return ref.watch(authNotifierProvider).user;
 });

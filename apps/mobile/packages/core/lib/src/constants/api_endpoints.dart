@@ -26,9 +26,11 @@ class ApiEndpoints {
   static String studentById(String id) => '/academics/students/$id';
 
   // --- Attendance ----------------------------------------------------------
-  static const String attendanceSessions = '/attendance/sessions';
-  static String attendanceSessionById(String id) => '/attendance/sessions/$id';
-  static String attendanceMarks(String sessionId) => '/attendance/sessions/$sessionId/marks';
+  static const String attendanceRoster = '/attendance/roster';
+  static const String attendanceBatch = '/attendance/batch';
+  static String attendanceForEnrollment(String enrollmentId) => '/attendance/student/$enrollmentId';
+  static const String attendanceSummary = '/attendance/summary';
+  static String attendanceCorrect(String id) => '/attendance/$id/correct';
 
   // --- Hifz ----------------------------------------------------------------
   static String hifzProgress(String studentId) => '/hifz/$studentId/progress';

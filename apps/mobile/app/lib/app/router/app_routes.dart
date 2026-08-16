@@ -75,21 +75,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: RoutePath.batches,
-        builder: (context, _) => HomeShell(
+        builder: (_, _) => const HomeShell(
           screenId: ScreenId.batches,
-          child: AttendanceSessionsScreen(
-            onOpenSession: (session) => context.push(
-              RoutePath.batchAttendance(session.id),
-            ),
-          ),
+          child: ModulePlaceholder(title: 'Batches', message: 'M03-APP-01'),
         ),
         routes: [
           GoRoute(
             path: ':batchId/attendance',
             builder: (context, state) => AttendanceRosterScreen(
-              sessionId: state.pathParameters['batchId'] ?? '',
+              batchId: state.pathParameters['batchId'] ?? '',
+              date: state.uri.queryParameters['date'] ?? IstDate.today(),
               title: state.uri.queryParameters['title'] ?? 'Roster',
-              isFinalised: state.uri.queryParameters['final'] == 'true',
             ),
           ),
           GoRoute(

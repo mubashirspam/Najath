@@ -5,39 +5,38 @@ import 'package:najath_core/najath_core.dart';
 import 'package:najath_design_system/najath_design_system.dart';
 
 import '../../domain/entities/attendance.dart';
-import '../notifiers/attendance_notifiers.dart';
+import '../providers/attendance_providers.dart';
 
-/// The roll-call roster.
+/// The roll-call roster — the whole offline stack, visible.
 ///
-/// The whole point of the offline stack is visible here: tapping a status
-/// writes the cache and queues the request, so the row updates on the next
-/// frame whether or not there is signal, and a "will send" marker distinguishes
-/// saved-here from saved-on-the-server.
+/// Everyone defaults to present, so a class of forty with three absentees is
+/// three taps. Each tap writes SQLite and queues the request, so the row
+/// updates on the next frame whether or not there is signal, and a "will send"
+/// marker distinguishes saved-here from saved-on-the-server.
 class AttendanceRosterScreen extends ConsumerWidget {
   const AttendanceRosterScreen({
-    required this.sessionId,
+    required this.batchId,
+    required this.date,
     required this.title,
-    this.isFinalised = false,
+    this.session = AttendanceSession.fullDay,
     super.key,
   });
 
-  final String sessionId;
+  final String batchId;
+  final String date;
   final String title;
-  final bool isFinalised;
+  final AttendanceSession session;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final marks = ref.watch(attendanceMarksProvider(sessionId));
+    final key = RosterKey(batchId: batchId, date: date, session: session);
+    final roster = ref.watch(rosterProvider(key));
+    final tally = ref.watch(rosterTallyProvider(key));
 
-    // A finalised session may only be changed by someone who can amend; an
-    // open one needs the plain mark permission.
+    // A teacher marks their own batches; correcting a finalised session needs
+    // `attendance:update`, which the office holds.
     final canMark = ref.watch(
-      canProvider(
-        Permission(
-          Resources.attendance,
-          isFinalised ? 'amend' : 'mark',
-        ),
-      ),
+      canProvider(const Permission(Resources.attendance, 'create')),
     );
 
     return Scaffold(
@@ -45,57 +44,33 @@ class AttendanceRosterScreen extends ConsumerWidget {
       body: Column(
         children: [
           const OfflineBanner(),
-          if (!canMark)
-            Material(
-              color: context.colors.surfaceContainerHighest,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.visibility_outlined, size: 18),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        isFinalised
-                            ? 'This session is finalised — only the office can '
-                                  'change it.'
-                            : 'You can view this roster but not change it.',
-                        style: context.text.bodySmall,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          if (!canMark) const _ReadOnlyNotice(),
           Expanded(
-            child: marks.when(
+            child: roster.when(
               loading: () => const ListSkeleton(),
-              error: (error, _) => ErrorView(
-                error: error is AppException ? error.error : ApiError.fromException(error),
+              error: (error, stack) => FailureView(
+                failure: error is Failure ? error : Failure.unknown(error, stack),
+                onRetry: () => ref.invalidate(rosterProvider(key)),
               ),
-              data: (roster) {
-                if (roster.isEmpty) {
+              data: (entries) {
+                if (entries.isEmpty) {
                   return const EmptyView(
-                    message: 'No students in this session',
+                    message: 'No students enrolled in this batch',
                     icon: Icons.groups_outlined,
                   );
                 }
                 return ListView.separated(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  itemCount: roster.length,
+                  padding: const EdgeInsets.only(bottom: 96),
+                  itemCount: entries.length,
                   separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (context, index) => _RosterRow(
-                    mark: roster[index],
+                  itemBuilder: (context, index) => _RosterRowTile(
+                    entry: entries[index],
                     enabled: canMark,
                     onChanged: (status) => ref
-                        .read(markStudentActionProvider)
+                        .read(markAttendanceProvider)
                         .call(
-                          sessionId: sessionId,
-                          studentId: roster[index].studentId,
-                          studentName: roster[index].studentName,
+                          key: key,
+                          enrollmentId: entries[index].enrollmentId,
                           status: status,
                         ),
                   ),
@@ -105,18 +80,45 @@ class AttendanceRosterScreen extends ConsumerWidget {
           ),
         ],
       ),
+      bottomSheet: roster.hasValue ? _TallyFooter(tally: tally) : null,
     );
   }
 }
 
-class _RosterRow extends StatelessWidget {
-  const _RosterRow({
-    required this.mark,
+class _ReadOnlyNotice extends StatelessWidget {
+  const _ReadOnlyNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: context.colors.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            const Icon(Icons.visibility_outlined, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'You can view this roster but not change it.',
+                style: context.text.bodySmall,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RosterRowTile extends StatelessWidget {
+  const _RosterRowTile({
+    required this.entry,
     required this.enabled,
     required this.onChanged,
   });
 
-  final AttendanceMark mark;
+  final AttendanceEntry entry;
   final bool enabled;
   final ValueChanged<AttendanceStatus> onChanged;
 
@@ -126,53 +128,101 @@ class _RosterRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
+          SizedBox(
+            width: 32,
+            child: Text(
+              entry.rollNo ?? '',
+              style: context.text.labelMedium?.copyWith(
+                color: context.colors.onSurfaceVariant,
+              ),
+            ),
+          ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(mark.studentName, style: context.text.bodyLarge),
-                if (mark.isPending)
+                Text(entry.studentName, style: context.text.bodyLarge),
+                if (entry.isPending)
                   Text(
                     'Will send when online',
                     style: context.text.labelSmall?.copyWith(
-                      color: AppColors.warning,
+                      color: HufzTokens.warning,
+                    ),
+                  )
+                else if (!entry.isMarked)
+                  Text(
+                    'Not marked',
+                    style: context.text.labelSmall?.copyWith(
+                      color: context.colors.onSurfaceVariant,
                     ),
                   ),
               ],
             ),
           ),
-          const SizedBox(width: 12),
-          SegmentedButton<AttendanceStatus>(
-            segments: const [
-              ButtonSegment(
-                value: AttendanceStatus.present,
-                icon: Icon(Icons.check),
-                tooltip: 'Present',
-              ),
-              ButtonSegment(
-                value: AttendanceStatus.late,
-                icon: Icon(Icons.schedule),
-                tooltip: 'Late',
-              ),
-              ButtonSegment(
-                value: AttendanceStatus.absent,
-                icon: Icon(Icons.close),
-                tooltip: 'Absent',
-              ),
-              ButtonSegment(
-                value: AttendanceStatus.excused,
-                icon: Icon(Icons.event_busy),
-                tooltip: 'Excused',
+          const SizedBox(width: 8),
+          AttendanceToggle<AttendanceStatus>(
+            value: entry.status,
+            options: AttendanceStatus.markable,
+            enabled: enabled,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TallyFooter extends StatelessWidget {
+  const _TallyFooter({required this.tally});
+
+  final RosterTally tally;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      elevation: 8,
+      color: context.colors.surface,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              _Count(label: 'Present', value: tally.present, color: HufzTokens.present),
+              _Count(label: 'Absent', value: tally.absent, color: HufzTokens.absent),
+              _Count(label: 'Late', value: tally.late, color: HufzTokens.late),
+              const Spacer(),
+              Text(
+                '${tally.marked} of ${tally.total}',
+                style: context.text.labelLarge?.copyWith(
+                  color: tally.isComplete ? HufzTokens.present : context.colors.onSurfaceVariant,
+                ),
               ),
             ],
-            selected: {mark.status},
-            showSelectedIcon: false,
-            style: const ButtonStyle(
-              visualDensity: VisualDensity.compact,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            onSelectionChanged: enabled ? (selection) => onChanged(selection.first) : null,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Count extends StatelessWidget {
+  const _Count({required this.label, required this.value, required this.color});
+
+  final String label;
+  final int value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$value', style: context.text.titleMedium?.copyWith(color: color)),
+          Text(label, style: context.text.labelSmall),
         ],
       ),
     );
