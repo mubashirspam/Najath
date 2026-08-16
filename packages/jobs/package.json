@@ -15,5 +15,8 @@
   },
   "dependencies": {
     "@trigger.dev/sdk": "^4.5.11"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
   }
 }

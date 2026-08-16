@@ -6,12 +6,19 @@ plugins {
 
 android {
     namespace = "com.najath.najath"
-    compileSdk = flutter.compileSdkVersion
+    // permission_handler_android requires consumers to compile against API 37+.
+    // Google no longer publishes a plain `android-37` platform, only the minor
+    // releases, so the minor has to be named explicitly — AGP 9 maps this pair
+    // to `platforms/android-37.1`.
+    compileSdk = 37
+    compileSdkMinor = 1
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Required by flutter_local_notifications.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -38,6 +45,10 @@ kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
 
 flutter {

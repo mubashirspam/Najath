@@ -16,5 +16,8 @@
   "dependencies": {
     "@najath/db": "workspace:*",
     "date-fns": "^4.4.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
   }
 }

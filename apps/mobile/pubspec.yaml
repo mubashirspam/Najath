@@ -43,10 +43,13 @@ melos:
   command:
     bootstrap:
       runPubGetInParallel: true
+  # `dart run melos`, not a bare `melos`: script bodies run in a plain /bin/sh
+  # with no ~/.pub-cache/bin on PATH, so a global activation would otherwise be
+  # a prerequisite for CI and for anyone who has not edited their shell profile.
   scripts:
-    analyze: melos exec -- flutter analyze .
-    test: melos exec --dir-exists=test -- flutter test
-    gen: melos exec --depends-on="build_runner" -- dart run build_runner build -d
-    gen:watch: melos exec --depends-on="build_runner" -- dart run build_runner watch -d
-    format: melos exec -- dart format . --line-length 100
-    clean:deep: melos clean && melos exec -- flutter clean
+    analyze: dart run melos exec -- flutter analyze .
+    test: dart run melos exec --dir-exists=test -- flutter test
+    gen: dart run melos exec --depends-on="build_runner" -- dart run build_runner build -d
+    gen:watch: dart run melos exec --depends-on="build_runner" -- dart run build_runner watch -d
+    format: dart run melos exec -- dart format . --line-length 100
+    clean:deep: dart run melos clean && dart run melos exec -- flutter clean

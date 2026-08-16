@@ -1,24 +1,32 @@
 name: db
 
-# Migrations are applied by CI only. Each PR that touches packages/db gets its
-# own Neon branch, migrations run there, and the branch is deleted when the PR
-# closes. main is migrated on merge. Developers still run `db:generate` locally
-# and commit the SQL + journal — CI never generates.
+# Migrations are applied by CI only. Developers run `db:generate` locally and
+# commit the SQL + journal; nobody points `db:migrate` at a shared database from
+# their own machine.
+#
+# Databases (two, not three):
+#
+#   dev + staging  →  one shared Neon branch, GitHub environment `dev`
+#   production     →  its own Neon branch,    GitHub environment `production`
+#
+# Every PR touching packages/db additionally gets a throwaway Neon branch forked
+# from whichever of those two its base branch targets, so a migration is proven
+# against production-shaped data before it reaches production.
 
 on:
   pull_request:
     types: [opened, reopened, synchronize, closed]
     paths:
-      - 'packages/db/**'
-      - '.github/workflows/db.yml'
+      - "packages/db/**"
+      - ".github/workflows/db.yml"
   push:
-    branches: [main]
+    branches: [dev, staging, production]
     paths:
-      - 'packages/db/**'
-      - '.github/workflows/db.yml'
+      - "packages/db/**"
+      - ".github/workflows/db.yml"
 
 concurrency:
-  group: db-${{ github.workflow }}-${{ github.ref }}
+  group: db-${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -45,13 +53,22 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Pick the Neon parent for this PR's base branch
+        id: parent
+        run: |
+          case "${{ github.base_ref }}" in
+            production) parent=production ;;
+            *)          parent=dev ;;
+          esac
+          echo "name=${parent}" >> "$GITHUB_OUTPUT"
+
       - name: Create Neon branch
         id: branch
         uses: neondatabase/create-branch-action@v6
         with:
           project_id: ${{ env.NEON_PROJECT_ID }}
           branch_name: preview/pr-${{ github.event.number }}
-          parent: main
+          parent: ${{ steps.parent.outputs.name }}
           api_key: ${{ secrets.NEON_API_KEY }}
 
       - name: Verify committed migrations match the schema
@@ -76,8 +93,9 @@ jobs:
         with:
           comment-tag: neon-preview
           message: |
-            **Neon preview branch** `preview/pr-${{ github.event.number }}` is up
-            to date with this PR's migrations. It is deleted when the PR closes.
+            **Neon preview branch** `preview/pr-${{ github.event.number }}`
+            (forked from `${{ steps.parent.outputs.name }}`) is up to date with
+            this PR's migrations. It is deleted when the PR closes.
 
   # ----------------------------------------------------------------- cleanup --
   cleanup:
@@ -91,14 +109,37 @@ jobs:
           branch: preview/pr-${{ github.event.number }}
           api_key: ${{ secrets.NEON_API_KEY }}
 
-  # -------------------------------------------------------------------- main --
-  production:
-    name: migrate main
+  # ------------------------------------------------------------------ deploy --
+  target:
+    name: resolve target environment
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    environment: production
+    outputs:
+      environment: ${{ steps.map.outputs.environment }}
+    steps:
+      - id: map
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            production)
+              env_name=production ;;
+            dev|staging)
+              # Deliberately the same database. A push to staging after the
+              # same migration already landed on dev is a no-op — Drizzle skips
+              # anything already in the journal table.
+              env_name=dev ;;
+            *)
+              echo "::error::unexpected branch ${GITHUB_REF_NAME}"; exit 1 ;;
+          esac
+          echo "environment=${env_name}" >> "$GITHUB_OUTPUT"
+
+  migrate:
+    name: migrate ${{ needs.target.outputs.environment }}
+    needs: target
+    runs-on: ubuntu-latest
+    environment: ${{ needs.target.outputs.environment }}
     concurrency:
-      group: db-migrate-main
+      # Never two migrations against the same database at once.
+      group: db-migrate-${{ needs.target.outputs.environment }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v5

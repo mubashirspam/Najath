@@ -23,12 +23,35 @@ of the database that costs nothing while idle.
   branch when the PR closes.
 - The preview job re-runs `db:generate` and fails if the result differs from what
   was committed, so a schema edit without a matching migration cannot merge.
-- `main` is migrated on merge, gated behind the `production` environment.
+- Preview branches fork from `production` when the PR targets `production`, and
+  from `dev` otherwise, so a migration is rehearsed against data shaped like the
+  database it will actually hit.
+
+## Environments
+
+Three long-lived git branches, two databases:
+
+| Branch       | GitHub environment | Neon branch  |
+| ------------ | ------------------ | ------------ |
+| `dev`        | `dev`              | `dev`        |
+| `staging`    | `dev`              | `dev`        |
+| `production` | `production`       | `production` |
+
+`dev` and `staging` deliberately share one database. The mapping lives in the
+`target` job of `db.yml` rather than in duplicated environment secrets, so the
+sharing is visible in the diff when someone changes it.
+
+Sharing is safe for migrations specifically because Drizzle's journal table makes
+re-application a no-op: by the time `staging` runs, the migration `dev` already
+applied is skipped. It is _not_ safe for data — staging exercises the same rows
+as dev, so neither is a realistic rehearsal for production data volume. Splitting
+them later means adding a `staging` GitHub environment with its own Neon branch
+and one line in the `case` statement.
 
 ## Consequences
 
-- Requires repo variable `NEON_PROJECT_ID` and secrets `NEON_API_KEY` and
-  `DATABASE_URL` (the production connection string).
+- Requires repo variable `NEON_PROJECT_ID`, secret `NEON_API_KEY`, and a
+  `DATABASE_URL` secret on each of the `dev` and `production` environments.
 - Journal collisions become ordinary PR conflicts, caught before merge rather
   than after someone has already migrated a shared database.
 - A migration cannot be applied out of band in an emergency without either
