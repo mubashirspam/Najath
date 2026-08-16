@@ -50,6 +50,21 @@ in `apps/mobile/pubspec.yaml`.
 - **Firebase** — `google-services.json` / `GoogleService-Info.plist` per flavor.
   Both are gitignored.
 
+## Migrations
+
+CI owns every `db:migrate`. You run `db:generate` locally and commit the SQL +
+journal; `.github/workflows/db.yml` spins up a Neon branch per PR, applies the
+migrations there, and migrates `main` on merge. See
+[ADR 0001](docs/adr/0001-migrations-run-in-ci.md).
+
+Needs one repo variable and two secrets:
+
+| | |
+|---|---|
+| `vars.NEON_PROJECT_ID` | Neon project id |
+| `secrets.NEON_API_KEY` | Neon API key, for branch create/delete |
+| `secrets.DATABASE_URL` | production connection string (`production` environment) |
+
 ## Known version constraints
 
 The Dart analyzer-plugin ecosystem is behind analyzer 13, which forces a few pins:

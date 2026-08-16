@@ -1,0 +1,118 @@
+name: db
+
+# Migrations are applied by CI only. Each PR that touches packages/db gets its
+# own Neon branch, migrations run there, and the branch is deleted when the PR
+# closes. main is migrated on merge. Developers still run `db:generate` locally
+# and commit the SQL + journal — CI never generates.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+    paths:
+      - 'packages/db/**'
+      - '.github/workflows/db.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'packages/db/**'
+      - '.github/workflows/db.yml'
+
+concurrency:
+  group: db-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+
+jobs:
+  # ---------------------------------------------------------------- preview --
+  preview:
+    name: migrate preview branch
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Create Neon branch
+        id: branch
+        uses: neondatabase/create-branch-action@v6
+        with:
+          project_id: ${{ env.NEON_PROJECT_ID }}
+          branch_name: preview/pr-${{ github.event.number }}
+          parent: main
+          api_key: ${{ secrets.NEON_API_KEY }}
+
+      - name: Verify committed migrations match the schema
+        # Fails if someone edited src/schema without running db:generate.
+        run: |
+          pnpm --filter @najath/db db:generate
+          if ! git diff --quiet -- packages/db/migrations; then
+            echo "::error::packages/db/migrations is out of date. Run 'pnpm --filter @najath/db db:generate' and commit the result."
+            git --no-pager diff --stat -- packages/db/migrations
+            exit 1
+          fi
+        env:
+          DATABASE_URL: ${{ steps.branch.outputs.db_url_pooled }}
+
+      - name: Apply migrations
+        run: pnpm --filter @najath/db db:migrate
+        env:
+          DATABASE_URL: ${{ steps.branch.outputs.db_url }}
+
+      - name: Comment the preview branch on the PR
+        uses: thollander/actions-comment-pull-request@v3
+        with:
+          comment-tag: neon-preview
+          message: |
+            **Neon preview branch** `preview/pr-${{ github.event.number }}` is up
+            to date with this PR's migrations. It is deleted when the PR closes.
+
+  # ----------------------------------------------------------------- cleanup --
+  cleanup:
+    name: delete preview branch
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: neondatabase/delete-branch-action@v3
+        with:
+          project_id: ${{ env.NEON_PROJECT_ID }}
+          branch: preview/pr-${{ github.event.number }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+
+  # -------------------------------------------------------------------- main --
+  production:
+    name: migrate main
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: db-migrate-main
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Apply migrations
+        run: pnpm --filter @najath/db db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
