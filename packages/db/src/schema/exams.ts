@@ -1,0 +1,2 @@
+// exams module tables
+export {};

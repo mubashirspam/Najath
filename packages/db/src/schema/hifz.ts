@@ -1,0 +1,2 @@
+// hifz module tables
+export {};

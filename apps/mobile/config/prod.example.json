@@ -1,0 +1,5 @@
+{
+  "API_BASE_URL": "https://najath.app/api/v1",
+  "ENV": "prod",
+  "ENABLE_LOGGING": false
+}

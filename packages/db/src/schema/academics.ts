@@ -1,0 +1,2 @@
+// academics module tables
+export {};

@@ -1,0 +1,52 @@
+name: najath_workspace
+description: "Najath Quran Academy mobile workspace root (Dart pub workspace)."
+publish_to: 'none'
+
+environment:
+  sdk: ^3.12.2
+
+# Native pub workspace (Dart 3.6+). Every member declares `resolution: workspace`
+# and shares this single lockfile / .dart_tool. Melos 8 delegates to this, so
+# `melos bootstrap` is just `flutter pub get` at the root.
+workspace:
+  - app
+  - packages/core
+  - packages/design_system
+  - packages/network
+  - packages/local_db
+  - packages/sync
+  - packages/auth
+  - packages/features/attendance
+  - packages/features/hifz
+  - packages/features/academics
+  - packages/features/exams
+  - packages/features/progress
+  - packages/features/leave
+  - packages/features/hostel
+  - packages/features/canteen
+  - packages/features/activities
+  - packages/features/announcements
+  - packages/features/profile
+
+dev_dependencies:
+  # Melos 7+ refuses to resolve a workspace unless it is a dev_dependency here.
+  melos: ">=7.4.1 <7.8.2"
+
+# Melos 7+ reads its config from the workspace root pubspec, not melos.yaml.
+# Pinned below 7.8.2: from that version Melos requires cli_util ^0.5.0, which
+# drift_dev 2.34.0 (held back by the analyzer 12 ceiling) cannot satisfy.
+melos:
+  name: najath
+  packages:
+    - app
+    - packages/**
+  command:
+    bootstrap:
+      runPubGetInParallel: true
+  scripts:
+    analyze: melos exec -- flutter analyze .
+    test: melos exec --dir-exists=test -- flutter test
+    gen: melos exec --depends-on="build_runner" -- dart run build_runner build -d
+    gen:watch: melos exec --depends-on="build_runner" -- dart run build_runner watch -d
+    format: melos exec -- dart format . --line-length 100
+    clean:deep: melos clean && melos exec -- flutter clean

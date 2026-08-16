@@ -1,0 +1,2 @@
+// canteen module tables
+export {};

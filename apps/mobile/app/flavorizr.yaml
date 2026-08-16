@@ -1,0 +1,22 @@
+flavors:
+  dev:
+    app:
+      name: "Najath Dev"
+    android:
+      applicationId: "com.najath.erp.dev"
+    ios:
+      bundleId: "com.najath.erp.dev"
+  staging:
+    app:
+      name: "Najath Stg"
+    android:
+      applicationId: "com.najath.erp.stg"
+    ios:
+      bundleId: "com.najath.erp.stg"
+  prod:
+    app:
+      name: "Najath"
+    android:
+      applicationId: "com.najath.erp"
+    ios:
+      bundleId: "com.najath.erp"

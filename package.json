@@ -1,0 +1,33 @@
+{
+  "name": "najath",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Najath Quran Academy ERP",
+  "type": "module",
+  "packageManager": "pnpm@11.22.0",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json,yaml}\"",
+    "db:generate": "pnpm --filter @najath/db db:generate",
+    "db:migrate": "pnpm --filter @najath/db db:migrate",
+    "db:studio": "pnpm --filter @najath/db db:studio"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "11.22.0",
+      "onFail": "download"
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "eslint": "^10.8.1",
+    "prettier": "^3.9.6",
+    "tsx": "^4.23.12",
+    "turbo": "^2.10.10",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,34 @@
+# node
+node_modules/
+.next/
+.turbo/
+build/
+dist/
+*.tsbuildinfo
+
+# env
+.env*
+!.env.example
+
+# dart / flutter
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+*.g.dart
+*.freezed.dart
+
+# secrets / platform config
+# Leading `**/` matters: a pattern containing a slash is otherwise anchored to
+# the repo root and would miss apps/mobile/...
+**/ios/Runner/GoogleService-Info.plist
+**/android/app/google-services.json
+**/config/*.json
+!**/config/*.example.json
+
+# ide — melos regenerates .idea/ on every bootstrap
+.idea/
+*.iml
+
+# os
+.DS_Store

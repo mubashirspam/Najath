@@ -1,0 +1,2 @@
+// hostel module tables
+export {};
