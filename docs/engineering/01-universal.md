@@ -151,7 +151,7 @@ even if the route already guarded, and are surfaced in an admin activity feed.
 - **Conventional commits.** `feat(hifz): …`, `fix(attendance): …`,
   `chore(deps): …`. The scope is the module id or package name.
 - One task per PR where possible. A PR that touches three modules is three PRs.
-- Branch from `dev`, PR into `dev`. `dev → staging → production` promote by
+- Branch from `dev`, PR into `dev`. `dev → staging → main` promote by
   merge, never by cherry-pick.
 - The PR description states which task ID it closes and how it was verified.
 - Migrations are generated locally and committed; CI applies them. Never point

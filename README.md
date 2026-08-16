@@ -143,14 +143,14 @@ what stops the UI offering things that would 403.
 
 Three long-lived branches, **two** databases — `dev` and `staging` share one.
 
-| Branch       | Flavor    | GitHub environment | Database          |
-| ------------ | --------- | ------------------ | ----------------- |
-| `dev`        | `dev`     | `dev`              | shared Neon `dev` |
-| `staging`    | `staging` | `dev`              | shared Neon `dev` |
-| `production` | `prod`    | `production`       | Neon `production` |
+| Branch    | Flavor    | GitHub environment | Database          |
+| --------- | --------- | ------------------ | ----------------- |
+| `dev`     | `dev`     | `dev`              | shared Neon `dev` |
+| `staging` | `staging` | `dev`              | shared Neon `dev` |
+| `main`    | `prod`    | `production`       | Neon `production` |
 
 Feature branches PR into `dev`; `dev` promotes to `staging`, `staging` to
-`production`. Because `dev` and `staging` point at the same database, a
+`main`. Because `dev` and `staging` point at the same database, a
 migration that lands on `dev` is already applied by the time `staging` runs —
 Drizzle skips anything in its journal table, so the second run is a no-op.
 
@@ -164,15 +164,15 @@ environment.
 | Workflow | Runs                                                                                        |
 | -------- | ------------------------------------------------------------------------------------------- |
 | `ci.yml` | prettier `--check`, `turbo run lint typecheck build`, `melos run analyze`, `melos run test` |
-| `ci.yml` | Android debug APK — only on pushes to a shared branch, or PRs into `production`             |
+| `ci.yml` | Android debug APK — only on pushes to a shared branch, or PRs into `main`                   |
 | `db.yml` | migrations; see below                                                                       |
 
 ## Migrations
 
 CI owns every `db:migrate`. You run `db:generate` locally and commit the SQL +
 journal; `.github/workflows/db.yml` spins up a throwaway Neon branch for each PR
-that touches `packages/db` — forked from `production` when the PR targets
-`production`, from `dev` otherwise — and applies migrations to the shared or
+that touches `packages/db` — forked from the Neon `production` branch when the
+PR targets `main`, from `dev` otherwise — and applies migrations to the shared or
 production database on push. See [ADR 0001](docs/adr/0001-migrations-run-in-ci.md).
 
 Needs one repo variable and two secrets:

@@ -7,7 +7,7 @@ name: db
 # Databases (two, not three):
 #
 #   dev + staging  →  one shared Neon branch, GitHub environment `dev`
-#   production     →  its own Neon branch,    GitHub environment `production`
+#   main           →  its own Neon branch,    GitHub environment `production`
 #
 # Every PR touching packages/db additionally gets a throwaway Neon branch forked
 # from whichever of those two its base branch targets, so a migration is proven
@@ -20,7 +20,7 @@ on:
       - "packages/db/**"
       - ".github/workflows/db.yml"
   push:
-    branches: [dev, staging, production]
+    branches: [dev, staging, main]
     paths:
       - "packages/db/**"
       - ".github/workflows/db.yml"
@@ -57,7 +57,7 @@ jobs:
         id: parent
         run: |
           case "${{ github.base_ref }}" in
-            production) parent=production ;;
+            main)       parent=production ;;
             *)          parent=dev ;;
           esac
           echo "name=${parent}" >> "$GITHUB_OUTPUT"
@@ -120,7 +120,7 @@ jobs:
       - id: map
         run: |
           case "${GITHUB_REF_NAME}" in
-            production)
+            main)
               env_name=production ;;
             dev|staging)
               # Deliberately the same database. A push to staging after the

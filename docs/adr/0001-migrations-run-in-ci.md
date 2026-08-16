@@ -23,7 +23,7 @@ of the database that costs nothing while idle.
   branch when the PR closes.
 - The preview job re-runs `db:generate` and fails if the result differs from what
   was committed, so a schema edit without a matching migration cannot merge.
-- Preview branches fork from `production` when the PR targets `production`, and
+- Preview branches fork from the Neon `production` branch when the PR targets `main`, and
   from `dev` otherwise, so a migration is rehearsed against data shaped like the
   database it will actually hit.
 
@@ -31,11 +31,11 @@ of the database that costs nothing while idle.
 
 Three long-lived git branches, two databases:
 
-| Branch       | GitHub environment | Neon branch  |
-| ------------ | ------------------ | ------------ |
-| `dev`        | `dev`              | `dev`        |
-| `staging`    | `dev`              | `dev`        |
-| `production` | `production`       | `production` |
+| Branch    | GitHub environment | Neon branch  |
+| --------- | ------------------ | ------------ |
+| `dev`     | `dev`              | `dev`        |
+| `staging` | `dev`              | `dev`        |
+| `main`    | `production`       | `production` |
 
 `dev` and `staging` deliberately share one database. The mapping lives in the
 `target` job of `db.yml` rather than in duplicated environment secrets, so the

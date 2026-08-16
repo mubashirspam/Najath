@@ -3,7 +3,7 @@ name: ci
 on:
   pull_request:
   push:
-    branches: [dev, staging, production]
+    branches: [dev, staging, main]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
@@ -83,7 +83,7 @@ jobs:
     name: mobile (android build)
     # Gradle is slow and adds little on every feature push; run it where it
     # protects a shared branch.
-    if: github.event_name == 'push' || github.base_ref == 'production'
+    if: github.event_name == 'push' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -119,7 +119,7 @@ jobs:
         working-directory: apps/mobile
         run: |
           case "${GITHUB_REF_NAME}" in
-            production) flavor=prod ;;
+            main)       flavor=prod ;;
             staging)    flavor=staging ;;
             *)          flavor=dev ;;
           esac
