@@ -54,25 +54,51 @@ Step 5 is the one people get wrong. A define present in only one flavor silently
 falls back to its Dart default in the others, which is how staging ends up
 behaving like dev with nothing in the diff to explain it.
 
-## Database URLs — two, matching the two databases
+## Database URLs — pooled and direct
+
+Neon gives two hostnames for the _same_ database:
+
+| Hostname                             | Used by     | Why                                                                       |
+| ------------------------------------ | ----------- | ------------------------------------------------------------------------- |
+| `ep-xxx-pooler.region.aws.neon.tech` | the app     | Serverless functions open many short connections; the pooler absorbs them |
+| `ep-xxx.region.aws.neon.tech`        | drizzle-kit | Migrations need session state PgBouncer's transaction mode discards       |
+
+So three variables, not two:
 
 ```bash
-DATABASE_URL       # shared dev + staging. Everything defaults to this.
-DATABASE_URL_PROD  # production. Read-only from a laptop.
+DATABASE_URL           # POOLED,  dev+staging. The app at runtime.
+DATABASE_URL_UNPOOLED  # DIRECT,  dev+staging. db:generate / db:migrate / db:studio.
+DATABASE_URL_PROD      # DIRECT,  production. Inspection only.
 ```
 
-Two slots because there are two databases, not three — dev and staging share
-one Neon branch. There is no `DATABASE_URL_STAGING`; adding one would imply a
-separation that does not exist and that `db.yml` does not implement.
+`DATABASE_URL_UNPOOLED` falls back to `DATABASE_URL` when unset. That is fine on
+your own Neon branch and wrong on a shared one, where a migration racing another
+is a real possibility.
 
-**Use the direct endpoint, not the `-pooler` one.** drizzle-kit runs a migration
-inside a transaction, and PgBouncer in transaction pooling mode rejects that. The
-serverless driver the app uses is fine either way, so the direct URL works for
-both.
+This is the same split Neon's own Vercel integration provisions, so the names
+match what the ecosystem expects.
 
-**If you are changing schema, point `DATABASE_URL` at your own Neon branch**, not
-at the shared one. A half-applied migration on the shared branch blocks everyone
-else's local work.
+### Why migrations need the direct endpoint
+
+Not because PgBouncer rejects transactions — transaction pooling mode supports
+them; that is what it is named after. It discards **session**-scoped state
+between transactions, and drizzle-kit depends on two pieces of it: protocol-level
+prepared statements, and the advisory lock that stops two migrations running at
+once. Point drizzle-kit at the pooler and it either errors on prepared
+statements or, worse, loses the lock and lets two CI jobs migrate concurrently.
+
+### The app needs transactions
+
+`packages/db` uses `drizzle-orm/neon-serverless` (WebSocket), **not**
+`neon-http`. The HTTP driver is faster for one-shot reads but throws
+`No transactions support`, and this schema cannot be written without them:
+
+- an append-only correction is two statements — insert the new row, flip
+  `is_current` on the old — and half of that is a corrupt academic record;
+- every mutation writes `audit_log` in the same transaction as the change.
+
+If you ever switch a read path to `neon-http` for latency, it must be a read
+path, and it still uses the pooled URL.
 
 ### Inspecting production
 
@@ -85,8 +111,7 @@ Reads `DATABASE_URL_PROD` through `drizzle.config.prod.ts`.
 **There is deliberately no `db:migrate:prod`.** CI owns every migration — that
 is the whole point of [ADR-0001](../adr/0001-migrations-run-in-ci.md). A
 migration applied from a laptop never reaches the journal check that guards the
-PR, so the next PR fails against a database state nobody can account for. If you
-need a migration in production, it goes through a PR into `main`.
+PR, so the next PR fails against a database state nobody can account for.
 
 ## Secrets that must differ per environment
 
