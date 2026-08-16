@@ -10,6 +10,7 @@ commit; read the surface guide for whatever you are touching.
 | [03-flutter.md](03-flutter.md)                       | Layering, Riverpod, offline + sync, design system, testing     |
 | [04-admin-console.md](04-admin-console.md)           | RSC, server actions, tables, forms, the access matrix UI       |
 | [05-definition-of-done.md](05-definition-of-done.md) | The checklist every task closes against                        |
+| [06-environments.md](06-environments.md)             | The three environments, and where every value actually lives   |
 
 ## The source of truth
 

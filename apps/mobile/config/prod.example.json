@@ -1,5 +1,9 @@
 {
   "API_BASE_URL": "https://najath.app/api/v1",
   "ENV": "prod",
-  "ENABLE_LOGGING": false
+  "ENABLE_LOGGING": false,
+  "ENABLE_CRASH_REPORTING": true,
+  "SENTRY_DSN": "",
+  "SYNC_PULL_INTERVAL_MINUTES": 15,
+  "LOCAL_RETENTION_DAYS": 60
 }

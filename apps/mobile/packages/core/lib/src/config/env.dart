@@ -1,3 +1,9 @@
+// The analyzer runs with no `--dart-define` set, so every `fromEnvironment`
+// below collapses to its fallback and then matches the constructor default.
+// That is precisely the case these defaults exist for — the arguments are not
+// redundant in any real build.
+// ignore_for_file: avoid_redundant_argument_values
+
 /// Build flavors. Mirrors the Android/iOS product flavors created by
 /// flutter_flavorizr and the `--flavor` passed to `flutter run`.
 enum Environment { dev, staging, prod }
@@ -12,13 +18,21 @@ class EnvConfig {
     required this.env,
     required this.apiBaseUrl,
     required this.enableLogging,
+    this.enableCrashReporting = true,
+    this.sentryDsn = '',
+    this.syncPullInterval = const Duration(minutes: 15),
+    this.localRetentionDays = 60,
   });
 
-  /// Reads the values injected by `--dart-define-from-file`.
+  /// Reads the values injected by `--dart-define-from-file=config/<flavor>.json`.
   ///
   /// [flavor] comes from the platform build (Flutter's `appFlavor`), not from
   /// the JSON, so a dev config accidentally shipped in a prod build still
   /// reports the truth.
+  ///
+  /// Every key here must exist in all three `config/*.example.json` files —
+  /// a define that is only in one flavor silently falls back to its default in
+  /// the others, which is how staging ends up behaving like dev.
   factory EnvConfig.fromDartDefines(Environment flavor) {
     return EnvConfig(
       env: flavor,
@@ -29,6 +43,21 @@ class EnvConfig {
       enableLogging: bool.fromEnvironment(
         'ENABLE_LOGGING',
         defaultValue: flavor != Environment.prod,
+      ),
+      enableCrashReporting: bool.fromEnvironment(
+        'ENABLE_CRASH_REPORTING',
+        defaultValue: flavor == Environment.prod,
+      ),
+      sentryDsn: const String.fromEnvironment('SENTRY_DSN'),
+      syncPullInterval: const Duration(
+        minutes: int.fromEnvironment(
+          'SYNC_PULL_INTERVAL_MINUTES',
+          defaultValue: 15,
+        ),
+      ),
+      localRetentionDays: const int.fromEnvironment(
+        'LOCAL_RETENTION_DAYS',
+        defaultValue: 60,
       ),
     );
   }
@@ -41,6 +70,21 @@ class EnvConfig {
   /// Turns on Dio request/response logging. Never enable in prod — request
   /// bodies carry guardian phone numbers and student records.
   final bool enableLogging;
+
+  /// Sends crashes to Sentry and Crashlytics. Off in dev so a debugging session
+  /// does not bury real field crashes in noise.
+  final bool enableCrashReporting;
+
+  /// Empty means "not configured" — crash reporting stays inert rather than
+  /// failing at startup.
+  final String sentryDsn;
+
+  /// How often the delta pull runs while the app is in the foreground.
+  final Duration syncPullInterval;
+
+  /// How long academic data is kept in the local mirror before it is pruned on
+  /// launch. Older records are fetched on demand.
+  final int localRetentionDays;
 
   /// Root that Better Auth is mounted under.
   ///

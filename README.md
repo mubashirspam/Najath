@@ -11,12 +11,13 @@
 
 ## Start here
 
-| Read                                                     | For                                                        |
-| -------------------------------------------------------- | ---------------------------------------------------------- |
-| [`docs/srs/`](docs/srs/hufzul-quran-college-erp-spec.md) | The specification. It wins every disagreement.             |
-| [`docs/engineering/`](docs/engineering/README.md)        | How code gets written here. Read before your first commit. |
-| [`docs/plan/`](docs/plan/README.md)                      | Module-by-module task plan, phases P0–P4.                  |
-| [`docs/adr/`](docs/adr/)                                 | Why things are the way they are.                           |
+| Read                                                                         | For                                                        |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| [`docs/srs/`](docs/srs/hufzul-quran-college-erp-spec.md)                     | The specification. It wins every disagreement.             |
+| [`docs/engineering/`](docs/engineering/README.md)                            | How code gets written here. Read before your first commit. |
+| [`docs/plan/`](docs/plan/README.md)                                          | Module-by-module task plan, phases P0–P4.                  |
+| [`docs/adr/`](docs/adr/)                                                     | Why things are the way they are.                           |
+| [`docs/engineering/06-environments.md`](docs/engineering/06-environments.md) | Env vars, flavors, and where each value lives.             |
 
 The spec is written for Hufzul Quran College; the platform ships as **Najath**
 and carries the college as an institution, not as a build. Spec paths like
