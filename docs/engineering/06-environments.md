@@ -34,14 +34,19 @@ branch, one GitHub environment, and one line in that `case`.
 Copying a production secret into `.env` to "test something" puts a production
 credential on a developer machine and in shell history; use a Neon branch.
 
+`.env.example` only lists what something actually reads. A variable that no code
+consumes yet is kept there **commented out**, tagged with the module that will
+need it — a blank `R2_BUCKET=""` is indistinguishable from a misconfiguration,
+and people waste an afternoon on it.
+
 ### Adding a new variable
 
-1. Add it to `.env.example` with a comment saying what it does and how it
-   differs per environment. This file is the canonical list.
+1. Add it to `.env.example`, commented if nothing reads it yet, with a note on
+   what it does and how it differs per environment.
 2. Add it to your `.env`.
 3. Add it to Vercel for Preview and Production.
-4. If CI needs it, add it to the GitHub environment — not to repo-level secrets,
-   or staging would be able to read the production value.
+4. If CI needs it, add it to the GitHub **environment** — not to repo-level
+   secrets, or staging could read the production value.
 5. If the mobile app needs it, add it to **all three** `config/*.example.json`
    files and read it in `EnvConfig.fromDartDefines`.
 
@@ -49,25 +54,38 @@ Step 5 is the one people get wrong. A define present in only one flavor silently
 falls back to its Dart default in the others, which is how staging ends up
 behaving like dev with nothing in the diff to explain it.
 
-## Database URLs
+## Database URL — there is only one
 
-`.env` carries four slots. They are not interchangeable.
+`.env` carries **one** `DATABASE_URL`: the database your laptop talks to.
 
 ```bash
-DATABASE_URL           # what the app and drizzle-kit use right now
-DATABASE_URL_DEV       # Neon branch `dev` — shared by dev and staging
-DATABASE_URL_STAGING   # empty. Fill only if staging is split onto its own branch.
-DATABASE_URL_PROD      # Neon branch `production`. Read-only from a laptop.
+DATABASE_URL="postgresql://…@ep-xxx.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
 ```
+
+There is no `DATABASE_URL_STAGING` or `_PROD`, because `.env` does not configure
+staging or production. Those URLs belong in the GitHub environment secrets and
+in Vercel, where the thing that actually connects can read them. A staging URL
+sitting in a developer's `.env` is a credential on a laptop that nothing on that
+laptop is supposed to use.
+
+**Use the direct endpoint, not the `-pooler` one.** drizzle-kit runs a migration
+inside a transaction, and PgBouncer in transaction pooling mode rejects that. The
+serverless driver the app uses is fine either way, so the direct URL is the one
+that works for both.
 
 **If you are changing schema, point `DATABASE_URL` at your own Neon branch**, not
 at the shared `dev` one. A half-applied migration on the shared branch blocks
 everyone else's local work.
 
-`DATABASE_URL_PROD` exists for `drizzle-kit studio` when something needs
-inspecting in production. **Never run `db:migrate` against it.** CI owns every
-migration — that is the whole point of ADR-0001, and a laptop-applied migration
-is invisible to the journal check that guards the PR.
+To inspect production, pass the URL to the tool rather than storing it:
+
+```bash
+DATABASE_URL="<prod url>" pnpm --filter @najath/db db:studio
+```
+
+**Never run `db:migrate` that way.** CI owns every migration — that is the whole
+point of [ADR-0001](../adr/0001-migrations-run-in-ci.md), and a laptop-applied
+migration is invisible to the journal check that guards the PR.
 
 ## Secrets that must differ per environment
 
