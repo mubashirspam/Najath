@@ -54,38 +54,39 @@ Step 5 is the one people get wrong. A define present in only one flavor silently
 falls back to its Dart default in the others, which is how staging ends up
 behaving like dev with nothing in the diff to explain it.
 
-## Database URL — there is only one
-
-`.env` carries **one** `DATABASE_URL`: the database your laptop talks to.
+## Database URLs — two, matching the two databases
 
 ```bash
-DATABASE_URL="postgresql://…@ep-xxx.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
+DATABASE_URL       # shared dev + staging. Everything defaults to this.
+DATABASE_URL_PROD  # production. Read-only from a laptop.
 ```
 
-There is no `DATABASE_URL_STAGING` or `_PROD`, because `.env` does not configure
-staging or production. Those URLs belong in the GitHub environment secrets and
-in Vercel, where the thing that actually connects can read them. A staging URL
-sitting in a developer's `.env` is a credential on a laptop that nothing on that
-laptop is supposed to use.
+Two slots because there are two databases, not three — dev and staging share
+one Neon branch. There is no `DATABASE_URL_STAGING`; adding one would imply a
+separation that does not exist and that `db.yml` does not implement.
 
 **Use the direct endpoint, not the `-pooler` one.** drizzle-kit runs a migration
 inside a transaction, and PgBouncer in transaction pooling mode rejects that. The
-serverless driver the app uses is fine either way, so the direct URL is the one
-that works for both.
+serverless driver the app uses is fine either way, so the direct URL works for
+both.
 
 **If you are changing schema, point `DATABASE_URL` at your own Neon branch**, not
-at the shared `dev` one. A half-applied migration on the shared branch blocks
-everyone else's local work.
+at the shared one. A half-applied migration on the shared branch blocks everyone
+else's local work.
 
-To inspect production, pass the URL to the tool rather than storing it:
+### Inspecting production
 
 ```bash
-DATABASE_URL="<prod url>" pnpm --filter @najath/db db:studio
+pnpm --filter @najath/db db:studio:prod
 ```
 
-**Never run `db:migrate` that way.** CI owns every migration — that is the whole
-point of [ADR-0001](../adr/0001-migrations-run-in-ci.md), and a laptop-applied
-migration is invisible to the journal check that guards the PR.
+Reads `DATABASE_URL_PROD` through `drizzle.config.prod.ts`.
+
+**There is deliberately no `db:migrate:prod`.** CI owns every migration — that
+is the whole point of [ADR-0001](../adr/0001-migrations-run-in-ci.md). A
+migration applied from a laptop never reaches the journal check that guards the
+PR, so the next PR fails against a database state nobody can account for. If you
+need a migration in production, it goes through a PR into `main`.
 
 ## Secrets that must differ per environment
 
