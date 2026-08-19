@@ -4,6 +4,7 @@ import 'package:najath_network/najath_network.dart';
 
 import '../models/access_policy_dto.dart';
 import '../models/app_user_dto.dart';
+import '../models/session_dto.dart';
 
 /// The Better Auth session payload: a bearer token plus the user record.
 class SignInResult {
@@ -51,20 +52,15 @@ class AuthRemoteSource {
     );
   }
 
-  /// Re-reads the session. The bearer token is attached by `DioClient`, so a
-  /// 401 here means the session record is gone server-side.
-  Future<Result<AppUserDto>> session() {
-    return _client.get<AppUserDto>(
+  /// Re-reads the session, including the access policy.
+  ///
+  /// The bearer token is attached by `DioClient`, so a 401 here means the
+  /// session record is gone server-side — the only condition that signs a user
+  /// out. Anything else leaves the stored session alone.
+  Future<Result<SessionDto>> session() {
+    return _client.get<SessionDto>(
       endpoint: ApiEndpoints.session,
-      isAuth: true,
-      decode: (body) {
-        final map = body as Map<String, dynamic>;
-        final user = map['user'];
-        if (user is! Map<String, dynamic>) {
-          throw const FormatException('session response carried no user');
-        }
-        return AppUserDto.fromJson(user);
-      },
+      decode: (body) => SessionDto.fromJson(body as Map<String, dynamic>),
     );
   }
 

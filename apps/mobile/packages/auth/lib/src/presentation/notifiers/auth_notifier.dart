@@ -137,11 +137,13 @@ class AuthNotifier extends Notifier<AuthState> {
 
     if (ref.read(isOnlineProvider)) {
       final live = await repository.currentSession();
-      final user = live.valueOrNull;
+      final session = live.valueOrNull;
 
-      if (user != null) {
-        state = state.copyWith(isAuthenticated: true, user: user);
-        await ref.read(accessNotifierProvider.notifier).refresh();
+      if (session != null) {
+        state = state.copyWith(isAuthenticated: true, user: session.user);
+        // The policy arrived in the same response — no second request, and no
+        // window where the shell is computed against a stale one.
+        ref.read(accessNotifierProvider.notifier).adopt(session.policy);
       } else if (live.failureOrNull is UnauthorizedFailure) {
         await _clearLocalSession();
         _finishBootstrap(

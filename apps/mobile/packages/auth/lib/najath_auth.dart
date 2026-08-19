@@ -8,6 +8,7 @@ library;
 
 export 'src/data/models/access_policy_dto.dart';
 export 'src/data/models/app_user_dto.dart';
+export 'src/data/models/session_dto.dart';
 export 'src/data/repositories/access_repository_impl.dart';
 export 'src/data/repositories/auth_repository_impl.dart';
 export 'src/domain/entities/app_user.dart';

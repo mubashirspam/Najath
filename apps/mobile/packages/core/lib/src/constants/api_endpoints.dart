@@ -10,11 +10,18 @@ class ApiEndpoints {
   // these are written absolute-from-origin and resolved by DioClient.
   static const String signInEmail = '/auth/sign-in/email';
   static const String signOut = '/auth/sign-out';
-  static const String session = '/auth/get-session';
+
+  /// Better Auth's own session probe. The app prefers [session] below, which
+  /// returns the access policy in the same round trip.
+  static const String authSession = '/auth/get-session';
   static const String phoneOtpSend = '/auth/phone-number/send-otp';
   static const String phoneOtpVerify = '/auth/phone-number/verify';
 
   // --- Identity / access ---------------------------------------------------
+  /// User, roles, scopes, screens and shell in one request — what the mobile
+  /// shell is built from on every cold start.
+  static const String session = '/session';
+
   /// Role, permission set and allowed screens for the signed-in principal.
   static const String myAccess = '/me/access';
   static const String myProfile = '/me/profile';

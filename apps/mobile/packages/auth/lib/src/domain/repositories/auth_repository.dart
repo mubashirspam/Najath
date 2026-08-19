@@ -21,11 +21,12 @@ abstract class AuthRepository {
     required String code,
   });
 
-  /// Reads the session back from the server, refreshing the cached user.
+  /// Reads the session back from the server — user **and** access policy in one
+  /// round trip, which is what a cold start needs.
   ///
   /// Returns a [Failure] rather than throwing when offline, so a relaunch on a
   /// plane keeps the stored session instead of signing the user out.
-  Future<Result<AppUser>> currentSession();
+  Future<Result<({AppUser user, AccessPolicy policy})>> currentSession();
 
   /// The user persisted at last sign-in, available with no network at all.
   Future<AppUser?> cachedUser();

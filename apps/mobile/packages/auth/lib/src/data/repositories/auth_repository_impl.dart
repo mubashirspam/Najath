@@ -41,15 +41,18 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<Result<AppUser>> currentSession() async {
+  Future<Result<({AppUser user, AccessPolicy policy})>> currentSession() async {
     final res = await _remote.session();
     final failure = res.failureOrNull;
     if (failure != null) return fail(failure);
 
     final dto = res.valueOrNull!;
-    await _storage.saveUserId(dto.id);
-    await _storage.saveUserJson(dto.toJson());
-    return ok(dto.toEntity());
+    await _storage.saveUserId(dto.user.id);
+    await _storage.saveUserJson(dto.user.toJson());
+    // Persist the policy from the same response, so the next offline launch
+    // has it without a second request that may never succeed.
+    await _storage.saveAccessPolicy(dto.policy.toJson());
+    return ok((user: dto.user.toEntity(), policy: dto.toPolicy()));
   }
 
   @override

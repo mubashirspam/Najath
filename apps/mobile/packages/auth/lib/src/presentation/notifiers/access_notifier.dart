@@ -58,6 +58,13 @@ class AccessNotifier extends Notifier<AccessPolicy> {
     }
   }
 
+  /// Takes a policy that arrived with something else — the session response,
+  /// which carries it alongside the user so a cold start is one round trip.
+  void adopt(AccessPolicy policy) {
+    if (state.isEquivalentTo(policy)) return;
+    state = policy;
+  }
+
   /// Switches which role the shell is showing.
   ///
   /// Not a re-authentication: the session already carries every role. This
