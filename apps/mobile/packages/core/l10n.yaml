@@ -1,0 +1,11 @@
+# Localization lives in najath_core because every layer above it renders text —
+# the design system's failure views, a feature's roster, the app's shell. A
+# per-package ARB would mean three copies of "Try again" drifting apart.
+arb-dir: lib/src/l10n/arb
+template-arb-file: app_en.arb
+output-dir: lib/src/l10n/generated
+output-localization-file: najath_localizations.dart
+output-class: L10n
+nullable-getter: false
+# Generated output is committed so `flutter analyze` works on a fresh clone.
+# `melos run gen` regenerates it; CI fails on a diff.

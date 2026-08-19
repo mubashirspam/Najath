@@ -15,6 +15,7 @@ class FailureView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final offline = failure.isOffline;
 
     return Center(
@@ -30,14 +31,14 @@ class FailureView extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              headline(failure),
+              failure.message(l10n),
               style: context.text.bodyMedium,
               textAlign: TextAlign.center,
             ),
             if (offline) ...[
               const SizedBox(height: 6),
               Text(
-                'This will load once you are back online.',
+                l10n.failureOfflineHint,
                 style: context.text.bodySmall?.copyWith(
                   color: context.colors.onSurfaceVariant,
                 ),
@@ -49,7 +50,7 @@ class FailureView extends StatelessWidget {
               OutlinedButton.icon(
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh),
-                label: const Text('Try again'),
+                label: Text(l10n.actionTryAgain),
               ),
             ],
           ],
@@ -57,23 +58,6 @@ class FailureView extends StatelessWidget {
       ),
     );
   }
-
-  /// Placeholder copy until the ARB files land (P0-APP-09). The mapping lives
-  /// here, at the presentation edge — never in the domain layer, which carries
-  /// codes only.
-  /// Localizable one-line copy for a failure. Public so a snackbar can reuse
-  /// the same mapping as the full-page view.
-  static String headline(Failure failure) => switch (failure) {
-    NetworkFailure() || UnavailableOfflineFailure() => 'Not available offline yet',
-    TimeoutFailure() => 'The server took too long to respond',
-    UnauthorizedFailure() => 'Your session has ended',
-    ForbiddenFailure() => 'You do not have access to this',
-    ValidationFailure() => 'Some details need correcting',
-    ConflictFailure() => 'This was changed somewhere else',
-    NotFoundFailure() => 'Not found',
-    ServerFailure() => 'Something went wrong at our end',
-    UnknownFailure() => 'Something went wrong',
-  };
 }
 
 class EmptyView extends StatelessWidget {

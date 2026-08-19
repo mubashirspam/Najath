@@ -1,0 +1,151 @@
+{
+  "@@locale": "en",
+
+  "appName": "Najath",
+  "appTagline": "Quran Academy",
+
+  "actionTryAgain": "Try again",
+  "actionGoBack": "Go back",
+  "actionSignIn": "Sign in",
+  "actionSignOut": "Sign out",
+  "actionSendCode": "Send code",
+  "actionVerifyCode": "Verify code",
+  "actionResendCode": "Send the code again",
+  "actionDiscard": "Discard",
+  "actionTryNow": "Try now",
+
+  "failureOffline": "Not available offline yet",
+  "failureTimeout": "The server took too long to respond",
+  "failureSessionEnded": "Your session has ended",
+  "failureForbidden": "You do not have access to this",
+  "failureValidation": "Some details need correcting",
+  "failureConflict": "This was changed somewhere else",
+  "failureNotFound": "Not found",
+  "failureServer": "Something went wrong at our end",
+  "failureUnknown": "Something went wrong",
+  "failureOfflineHint": "This will load once you are back online.",
+
+  "offlineShowingSaved": "Offline — showing saved data",
+  "offlinePendingWrites": "{count, plural, =1{Offline — 1 change will send when you reconnect} other{Offline — {count} changes will send when you reconnect}}",
+  "@offlinePendingWrites": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+
+  "syncSending": "Sending your changes…",
+  "syncSendingItem": "Sending {label}…",
+  "@syncSendingItem": {
+    "placeholders": { "label": { "type": "String" } }
+  },
+  "syncUpdating": "Updating…",
+  "syncUpdatingItem": "Updating {label}…",
+  "@syncUpdatingItem": {
+    "placeholders": { "label": { "type": "String" } }
+  },
+  "syncUpToDate": "Everything is up to date",
+  "syncCouldNotFinish": "Sync could not finish",
+  "syncFallbackPolicy": "Showing default access — connect once to load your academy settings.",
+
+  "noAccessTitle": "No access",
+  "noAccessBody": "You do not have access to {section}",
+  "@noAccessBody": {
+    "placeholders": { "section": { "type": "String" } }
+  },
+  "noAccessSectionFallback": "this section",
+  "noAccessHint": "Access is managed by the academy office. Ask them to enable it for your role if you need it.",
+  "noSectionsEnabled": "Your account has no sections enabled yet.\nThe academy office can turn them on for your role.",
+
+  "loginStaffTab": "Staff",
+  "loginParentTab": "Guardian",
+  "loginEmail": "Email",
+  "loginPassword": "Password",
+  "loginPhone": "Phone number",
+  "loginOtpCode": "Six-digit code",
+  "loginRememberMe": "Remember me",
+  "loginEnterEmail": "Enter your email",
+  "loginEnterPhone": "Enter your phone number",
+  "loginEnterPassword": "Enter your password",
+  "loginEnterCode": "Enter the code we sent you",
+  "loginInvalidEmail": "That does not look like an email",
+
+  "settingsTitle": "Settings",
+  "settingsAppearance": "Appearance",
+  "settingsYourAccess": "Your access",
+  "settingsAccessSummary": "{screens, plural, =1{1 section} other{{screens} sections}} · {permissions} permissions",
+  "@settingsAccessSummary": {
+    "placeholders": {
+      "screens": { "type": "int" },
+      "permissions": { "type": "int" }
+    }
+  },
+  "settingsAccessDefaults": "defaults",
+  "settingsRefreshAccess": "Refresh access",
+  "settingsRefreshAccessHint": "Pick up changes made by the academy office",
+  "settingsAccessRefreshed": "Access refreshed",
+  "settingsClearCache": "Clear cached data",
+  "settingsClearCacheHint": "Keeps anything not yet sent",
+  "settingsCacheCleared": "Cached data cleared",
+  "settingsSections": "Sections",
+  "settingsSwitchRole": "Switch role",
+
+  "unsyncedTitle": "Unsynced work",
+  "unsyncedAllSent": "Everything has been sent",
+  "unsyncedWaiting": "Waiting to send",
+  "unsyncedRetrying": "{attempts, plural, =1{Retrying — 1 attempt so far} other{Retrying — {attempts} attempts so far}}",
+  "@unsyncedRetrying": {
+    "placeholders": { "attempts": { "type": "int" } }
+  },
+  "unsyncedRejected": "Rejected by the server",
+
+  "attendanceReadOnly": "You can view this roster but not change it.",
+  "attendanceWillSend": "Will send when online",
+  "attendanceNotMarked": "Not marked",
+  "attendanceNoStudents": "No students enrolled in this batch",
+  "attendanceMarkedOfTotal": "{marked} of {total}",
+  "@attendanceMarkedOfTotal": {
+    "placeholders": {
+      "marked": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "attendancePresent": "Present",
+  "attendanceAbsent": "Absent",
+  "attendanceLate": "Late",
+  "attendanceExcused": "Excused",
+  "attendanceOnLeave": "On leave",
+
+  "roleSuperAdmin": "System administrator",
+  "roleAdmin": "Office admin",
+  "roleDeptHead": "Department head",
+  "roleTeacher": "Teacher",
+  "roleHostelWarden": "Hostel warden",
+  "roleCanteenManager": "Canteen manager",
+  "roleAccountant": "Accountant",
+  "roleParent": "Parent",
+
+  "screenToday": "Today",
+  "screenBatches": "Batches",
+  "screenBatchAttendance": "Take attendance",
+  "screenBatchHifz": "Hifz log",
+  "screenMarksEntry": "Marks entry",
+  "screenLeaveApprovals": "Leave approvals",
+  "screenStudentDetail": "Student",
+  "screenTeacherReports": "Reports",
+  "screenWards": "Wards",
+  "screenWardAttendance": "Attendance",
+  "screenWardHifz": "Hifz",
+  "screenWardHifzHistory": "Hifz history",
+  "screenWardDoura": "Doura",
+  "screenWardAcademics": "Academics",
+  "screenWardHomework": "Homework",
+  "screenWardResults": "Results",
+  "screenWardActivities": "Activities",
+  "screenWardLeave": "Leave",
+  "screenWardHostel": "Hostel",
+  "screenWardCanteen": "Canteen",
+  "screenWardReports": "Progress reports",
+  "screenNotices": "Notices",
+  "screenRollcall": "Roll call",
+  "screenGatePass": "Gate pass",
+  "screenOccupancy": "Occupancy",
+  "screenVisitors": "Visitors"
+}

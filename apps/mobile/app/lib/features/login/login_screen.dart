@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:najath_auth/najath_auth.dart';
 import 'package:najath_core/najath_core.dart';
-import 'package:najath_design_system/najath_design_system.dart';
 
 /// Two sign-in surfaces on one screen.
 ///
@@ -46,11 +45,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final auth = ref.watch(authNotifierProvider);
     final notifier = ref.read(authNotifierProvider.notifier);
     final isGuardian = auth.method == SignInMethod.guardianOtp;
+    final l10n = context.l10n;
 
     ref.listen(authNotifierProvider, (previous, next) {
       final failure = next.failure;
       if (failure != null && failure != previous?.failure) {
-        context.showSnack(FailureView.headline(failure), isError: true);
+        context.showSnack(failure.message(context.l10n), isError: true);
       }
     });
 
@@ -67,7 +67,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      'Najath',
+                      l10n.appName,
                       style: context.text.headlineMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: context.colors.primary,
@@ -76,14 +76,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                     const SizedBox(height: 32),
                     SegmentedButton<SignInMethod>(
-                      segments: const [
+                      segments: [
                         ButtonSegment(
                           value: SignInMethod.staffPassword,
-                          label: Text('Staff'),
+                          label: Text(l10n.loginStaffTab),
                         ),
                         ButtonSegment(
                           value: SignInMethod.guardianOtp,
-                          label: Text('Guardian'),
+                          label: Text(l10n.loginParentTab),
                         ),
                       ],
                       selected: {auth.method},
@@ -104,7 +104,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         if (isGuardian) AutofillHints.telephoneNumber else AutofillHints.email,
                       ],
                       decoration: InputDecoration(
-                        labelText: isGuardian ? 'Phone number' : 'Email',
+                        labelText: isGuardian ? l10n.loginPhone : l10n.loginEmail,
                         prefixIcon: Icon(
                           isGuardian ? Icons.phone_outlined : Icons.mail_outline,
                         ),
@@ -114,7 +114,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           return isGuardian ? 'Enter your phone number' : 'Enter your email';
                         }
                         if (!isGuardian && !value.contains('@')) {
-                          return 'That does not look like an email';
+                          return l10n.loginInvalidEmail;
                         }
                         return null;
                       },
@@ -126,7 +126,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         obscureText: _obscure,
                         autofillHints: const [AutofillHints.password],
                         decoration: InputDecoration(
-                          labelText: 'Password',
+                          labelText: l10n.loginPassword,
                           prefixIcon: const Icon(Icons.lock_outline),
                           suffixIcon: IconButton(
                             icon: Icon(
@@ -136,26 +136,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                         ),
                         validator: (value) =>
-                            (value == null || value.isEmpty) ? 'Enter your password' : null,
+                            (value == null || value.isEmpty) ? l10n.loginEnterPassword : null,
                       )
                     else if (auth.otpRequested)
                       TextFormField(
                         controller: _code,
                         keyboardType: TextInputType.number,
                         autofillHints: const [AutofillHints.oneTimeCode],
-                        decoration: const InputDecoration(
-                          labelText: 'Six-digit code',
-                          prefixIcon: Icon(Icons.pin_outlined),
+                        decoration: InputDecoration(
+                          labelText: l10n.loginOtpCode,
+                          prefixIcon: const Icon(Icons.pin_outlined),
                         ),
-                        validator: (value) => (value == null || value.trim().length < 4)
-                            ? 'Enter the code we sent you'
-                            : null,
+                        validator: (value) =>
+                            (value == null || value.trim().length < 4) ? l10n.loginEnterCode : null,
                       ),
                     const SizedBox(height: 8),
                     CheckboxListTile(
                       value: _rememberMe,
                       onChanged: (value) => setState(() => _rememberMe = value ?? false),
-                      title: const Text('Remember me'),
+                      title: Text(l10n.loginRememberMe),
                       contentPadding: EdgeInsets.zero,
                       controlAffinity: ListTileControlAffinity.leading,
                       dense: true,
@@ -169,13 +168,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : Text(_buttonLabel(isGuardian, auth.otpRequested)),
+                          : Text(_buttonLabel(l10n, isGuardian, auth.otpRequested)),
                     ),
                     if (isGuardian && auth.otpRequested) ...[
                       const SizedBox(height: 8),
                       TextButton(
                         onPressed: auth.isBusy ? null : () => notifier.requestOtp(_identifier.text),
-                        child: const Text('Send the code again'),
+                        child: Text(l10n.actionResendCode),
                       ),
                     ],
                   ],
@@ -188,9 +187,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  String _buttonLabel(bool isGuardian, bool otpRequested) {
-    if (!isGuardian) return 'Sign in';
-    return otpRequested ? 'Verify code' : 'Send code';
+  String _buttonLabel(L10n l10n, bool isGuardian, bool otpRequested) {
+    if (!isGuardian) return l10n.actionSignIn;
+    return otpRequested ? l10n.actionVerifyCode : l10n.actionSendCode;
   }
 
   Future<void> _submit() async {

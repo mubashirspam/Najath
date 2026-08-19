@@ -98,7 +98,23 @@ pattern exemplar rather than as a finished module.
 
 ---
 
+## Needs a human before release
+
+**The Malayalam translations are unreviewed.** All 109 keys are filled and the
+parity tests pass, so the mechanism is sound and no string falls back to English
+by accident. But the strings themselves have not been read by a native speaker,
+and this is a product Kerala guardians will use daily. Treat `app_ml.arb` as a
+first draft: correct enough to build and demo against, not to ship.
+
+Domain vocabulary is deliberately transliterated rather than translated —
+ഹിഫ്‌സ്, ദൗറ — per the handbook's rule that the Ustadhs' words are the domain
+language.
+
 ## Recently closed
+
+`P0-APP-09` is done: 109 keys in `en` and `ml`, wired through `context.l10n`,
+with tests that fail on a missing key, an untranslated copy-paste, or a dropped
+ICU placeholder.
 
 `P0-TEST-01` is green. A full day for three batches — 66 marks — written with no
 network, the database closed and reopened from disk, then drained: zero loss,

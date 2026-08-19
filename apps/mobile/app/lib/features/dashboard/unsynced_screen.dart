@@ -21,10 +21,10 @@ class UnsyncedScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Unsynced work'),
+        title: Text(context.l10n.unsyncedTitle),
         actions: [
           IconButton(
-            tooltip: 'Try now',
+            tooltip: context.l10n.actionTryNow,
             onPressed: isOnline ? () => ref.read(syncEngineProvider.notifier).run() : null,
             icon: const Icon(Icons.sync),
           ),
@@ -42,8 +42,8 @@ class UnsyncedScreen extends ConsumerWidget {
               ),
               data: (writes) {
                 if (writes.isEmpty) {
-                  return const EmptyView(
-                    message: 'Everything has been sent',
+                  return EmptyView(
+                    message: context.l10n.unsyncedAllSent,
                     icon: Icons.cloud_done_outlined,
                   );
                 }
@@ -80,11 +80,10 @@ class _WriteTile extends StatelessWidget {
       title: Text(write.label ?? write.entity),
       subtitle: Text(
         write.isBlocked
-            ? (write.lastError ?? 'Rejected by the server')
+            ? (write.lastError ?? context.l10n.unsyncedRejected)
             : write.attempts == 0
-            ? 'Waiting to send'
-            : 'Retrying — ${write.attempts} attempt'
-                  '${write.attempts == 1 ? '' : 's'} so far',
+            ? context.l10n.unsyncedWaiting
+            : context.l10n.unsyncedRetrying(write.attempts),
         style: context.text.bodySmall?.copyWith(
           color: write.isBlocked ? context.colors.error : context.colors.onSurfaceVariant,
         ),
@@ -93,7 +92,7 @@ class _WriteTile extends StatelessWidget {
       // waiting would silently lose work the user believes is saved.
       trailing: write.isBlocked
           ? IconButton(
-              tooltip: 'Discard',
+              tooltip: context.l10n.actionDiscard,
               onPressed: onDiscard,
               icon: const Icon(Icons.delete_outline),
             )

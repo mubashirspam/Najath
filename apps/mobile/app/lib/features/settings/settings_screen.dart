@@ -17,9 +17,10 @@ class SettingsScreen extends ConsumerWidget {
     final user = ref.watch(currentUserProvider);
     final policy = ref.watch(accessNotifierProvider);
     final themeMode = ref.watch(themeModeProvider);
+    final l10n = context.l10n;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(title: Text(l10n.settingsTitle)),
       body: ListView(
         children: [
           if (user != null)
@@ -27,13 +28,13 @@ class SettingsScreen extends ConsumerWidget {
               leading: CircleAvatar(child: Text(user.initials)),
               title: Text(user.name),
               subtitle: Text(
-                '${user.displayIdentifier} · ${policy.activeRole.wire}',
+                '${user.displayIdentifier} · ${policy.activeRole.label(l10n)}',
               ),
             ),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.brightness_6_outlined),
-            title: const Text('Appearance'),
+            title: Text(l10n.settingsAppearance),
             trailing: SegmentedButton<ThemeMode>(
               segments: const [
                 ButtonSegment(
@@ -59,41 +60,39 @@ class SettingsScreen extends ConsumerWidget {
           const Divider(),
           ListTile(
             leading: const Icon(Icons.verified_user_outlined),
-            title: const Text('Your access'),
+            title: Text(l10n.settingsYourAccess),
             subtitle: Text(
-              '${policy.screens.length} section'
-              '${policy.screens.length == 1 ? '' : 's'} · '
-              '${policy.permissions.wires.length} permissions'
-              '${policy.isFallback ? ' (defaults)' : ''}',
+              '${l10n.settingsAccessSummary(policy.screens.length, policy.permissions.wires.length)}'
+              '${policy.isFallback ? ' (${l10n.settingsAccessDefaults})' : ''}',
             ),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => _showAccessSheet(context, policy),
+            onTap: () => _showAccessSheet(context, l10n, policy),
           ),
           ListTile(
             leading: const Icon(Icons.refresh),
-            title: const Text('Refresh access'),
-            subtitle: const Text('Pick up changes made by the academy office'),
+            title: Text(l10n.settingsRefreshAccess),
+            subtitle: Text(l10n.settingsRefreshAccessHint),
             onTap: () async {
               await ref.read(accessNotifierProvider.notifier).refresh();
-              if (context.mounted) context.showSnack('Access refreshed');
+              if (context.mounted) context.showSnack(l10n.settingsAccessRefreshed);
             },
           ),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.cleaning_services_outlined),
-            title: const Text('Clear cached data'),
-            subtitle: const Text('Keeps anything not yet sent'),
+            title: Text(l10n.settingsClearCache),
+            subtitle: Text(l10n.settingsClearCacheHint),
             onTap: () async {
               // The outbox is deliberately untouched: unsent work is the
               // teacher's, not ours to discard.
               await ref.read(appDatabaseProvider).clearCachedData();
-              if (context.mounted) context.showSnack('Cached data cleared');
+              if (context.mounted) context.showSnack(l10n.settingsCacheCleared);
             },
           ),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.logout),
-            title: const Text('Sign out'),
+            title: Text(l10n.actionSignOut),
             textColor: context.colors.error,
             iconColor: context.colors.error,
             onTap: () => unawaited(ref.read(authNotifierProvider.notifier).signOut()),
@@ -115,7 +114,7 @@ class SettingsScreen extends ConsumerWidget {
 
   /// Shows exactly what the role matrix grants. Worth surfacing: when a teacher
   /// says "I can't see exams", this answers it without a support call.
-  void _showAccessSheet(BuildContext context, AccessPolicy policy) {
+  void _showAccessSheet(BuildContext context, L10n l10n, AccessPolicy policy) {
     unawaited(
       showModalBottomSheet<void>(
         context: context,
@@ -123,7 +122,7 @@ class SettingsScreen extends ConsumerWidget {
         builder: (context) => ListView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           children: [
-            Text('Sections', style: context.text.titleMedium),
+            Text(l10n.settingsSections, style: context.text.titleMedium),
             const SizedBox(height: 8),
             for (final screen in ScreenRegistry.all)
               ListTile(
@@ -137,7 +136,7 @@ class SettingsScreen extends ConsumerWidget {
                       ? AppColors.success
                       : context.colors.onSurfaceVariant,
                 ),
-                title: Text(screen.label),
+                title: Text(screenLabel(l10n, screen.id)),
                 subtitle: Text(screen.requires.wire),
               ),
           ],

@@ -20,7 +20,7 @@ class SplashScreen extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Najath',
+              context.l10n.appName,
               style: context.text.headlineMedium?.copyWith(
                 fontWeight: FontWeight.w700,
                 color: context.colors.primary,
@@ -28,7 +28,7 @@ class SplashScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Quran Academy',
+              context.l10n.appTagline,
               style: context.text.bodyMedium?.copyWith(
                 color: context.colors.onSurfaceVariant,
               ),

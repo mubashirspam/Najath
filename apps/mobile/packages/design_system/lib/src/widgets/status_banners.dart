@@ -34,9 +34,8 @@ class OfflineBanner extends ConsumerWidget {
             Expanded(
               child: Text(
                 queued == 0
-                    ? 'Offline — showing saved data'
-                    : 'Offline — $queued change${queued == 1 ? '' : 's'} will '
-                          'send when you reconnect',
+                    ? context.l10n.offlineShowingSaved
+                    : context.l10n.offlinePendingWrites(queued),
                 style: context.text.bodySmall,
               ),
             ),
@@ -75,7 +74,7 @@ class SyncProgressBanner extends ConsumerWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    _message(progress),
+                    _message(context.l10n, progress),
                     style: context.text.bodySmall,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -99,12 +98,13 @@ class SyncProgressBanner extends ConsumerWidget {
     );
   }
 
-  String _message(SyncProgress progress) => switch (progress.phase) {
+  String _message(L10n l10n, SyncProgress progress) => switch (progress.phase) {
     SyncPhase.uploading =>
-      progress.label == null ? 'Sending your changes…' : 'Sending ${progress.label}…',
-    SyncPhase.downloading => progress.label == null ? 'Updating…' : 'Updating ${progress.label}…',
-    SyncPhase.done => 'Everything is up to date',
-    SyncPhase.failed => 'Sync could not finish',
+      progress.label == null ? l10n.syncSending : l10n.syncSendingItem(progress.label!),
+    SyncPhase.downloading =>
+      progress.label == null ? l10n.syncUpdating : l10n.syncUpdatingItem(progress.label!),
+    SyncPhase.done => l10n.syncUpToDate,
+    SyncPhase.failed => l10n.syncCouldNotFinish,
     SyncPhase.idle => '',
   };
 }
@@ -127,8 +127,7 @@ class FallbackPolicyNotice extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Showing default access — connect once to load your academy '
-                'settings.',
+                context.l10n.syncFallbackPolicy,
                 style: context.text.bodySmall,
               ),
             ),

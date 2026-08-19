@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:najath_core/najath_core.dart';
 import 'package:najath_design_system/najath_design_system.dart';
 
 import 'app/router/app_routes.dart';
@@ -17,6 +18,10 @@ class NajathApp extends ConsumerWidget {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: ref.watch(themeModeProvider),
+      // English and Malayalam from day one. The device locale decides; a
+      // guardian who reads Malayalam should never have to find a setting.
+      localizationsDelegates: localizationsDelegates,
+      supportedLocales: supportedLocales,
       routerConfig: ref.watch(routerProvider),
       builder: (context, child) => _FlavorBanner(
         show: kDebugMode && F.appFlavor != Flavor.prod,

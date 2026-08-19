@@ -72,12 +72,11 @@ class NoAccessView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = screenId == null
-        ? 'this section'
-        : (ScreenRegistry.byId(screenId!)?.label ?? 'this section');
+    final l10n = context.l10n;
+    final section = screenId == null ? l10n.noAccessSectionFallback : screenLabel(l10n, screenId!);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('No access')),
+      appBar: AppBar(title: Text(l10n.noAccessTitle)),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -90,14 +89,13 @@ class NoAccessView extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'You do not have access to $label',
+              l10n.noAccessBody(section),
               style: context.text.titleMedium,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
-              'Access is managed by the academy office. Ask them to enable it '
-              'for your role if you need it.',
+              l10n.noAccessHint,
               style: context.text.bodyMedium?.copyWith(
                 color: context.colors.onSurfaceVariant,
               ),
@@ -105,7 +103,7 @@ class NoAccessView extends StatelessWidget {
             ),
             if (onBack != null) ...[
               const SizedBox(height: 24),
-              FilledButton(onPressed: onBack, child: const Text('Go back')),
+              FilledButton(onPressed: onBack, child: Text(l10n.actionGoBack)),
             ],
           ],
         ),

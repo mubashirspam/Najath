@@ -53,12 +53,12 @@ class HomeShell extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(ScreenRegistry.byId(screenId)?.label ?? 'Najath'),
+        title: Text(screenLabel(context.l10n, screenId)),
         actions: [
           const _PendingWritesButton(),
           if (policy.hasMultipleRoles)
             IconButton(
-              tooltip: 'Switch role',
+              tooltip: context.l10n.settingsSwitchRole,
               icon: const Icon(Icons.swap_horiz),
               onPressed: () => _showRoleSwitcher(context, ref, policy),
             ),
@@ -87,7 +87,7 @@ class HomeShell extends ConsumerWidget {
                     for (final d in destinations)
                       NavigationRailDestination(
                         icon: Icon(_iconFor(d.id)),
-                        label: Text(d.label),
+                        label: Text(screenLabel(context.l10n, d.id)),
                       ),
                   ],
                 ),
@@ -103,7 +103,10 @@ class HomeShell extends ConsumerWidget {
               onDestinationSelected: (i) => _open(context, ref, destinations[i].id),
               destinations: [
                 for (final d in destinations)
-                  NavigationDestination(icon: Icon(_iconFor(d.id)), label: d.label),
+                  NavigationDestination(
+                    icon: Icon(_iconFor(d.id)),
+                    label: screenLabel(context.l10n, d.id),
+                  ),
               ],
             ),
     );
@@ -134,7 +137,7 @@ class HomeShell extends ConsumerWidget {
                         ? Icons.radio_button_checked
                         : Icons.radio_button_unchecked,
                   ),
-                  title: Text(_roleLabel(role)),
+                  title: Text(role.label(context.l10n)),
                   onTap: () {
                     Navigator.of(context).pop();
                     ref.read(accessNotifierProvider.notifier).switchRole(role);
@@ -148,17 +151,6 @@ class HomeShell extends ConsumerWidget {
   }
 }
 
-String _roleLabel(AppRole role) => switch (role) {
-  AppRole.superAdmin => 'System administrator',
-  AppRole.admin => 'Office admin',
-  AppRole.deptHead => 'Department head',
-  AppRole.teacher => 'Teacher',
-  AppRole.hostelWarden => 'Hostel warden',
-  AppRole.canteenManager => 'Canteen manager',
-  AppRole.accountant => 'Accountant',
-  AppRole.parent => 'Parent',
-};
-
 /// What a principal sees when the matrix grants them nothing — better than an
 /// empty shell with no explanation.
 class _NoDestinationsView extends StatelessWidget {
@@ -167,7 +159,7 @@ class _NoDestinationsView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Najath')),
+      appBar: AppBar(title: Text(context.l10n.appName)),
       body: const EmptyView(
         message:
             'Your account has no sections enabled yet.\n'
@@ -187,7 +179,7 @@ class _PendingWritesButton extends ConsumerWidget {
     if (pending.isEmpty) return const SizedBox.shrink();
 
     return IconButton(
-      tooltip: 'Unsynced work',
+      tooltip: context.l10n.unsyncedTitle,
       onPressed: () => context.push(RoutePath.unsynced),
       icon: Badge.count(
         count: pending.length,

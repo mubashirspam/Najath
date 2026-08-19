@@ -17,6 +17,7 @@ export 'src/constants/cache_boxes.dart';
 export 'src/constants/secure_storage_keys.dart';
 export 'src/error/failure.dart';
 export 'src/extensions/context_extensions.dart';
+export 'src/l10n/l10n.dart';
 export 'src/responsive/breakpoints.dart';
 export 'src/responsive/responsive_layout.dart';
 export 'src/storage/secure_storage.dart';

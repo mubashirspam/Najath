@@ -54,8 +54,8 @@ class AttendanceRosterScreen extends ConsumerWidget {
               ),
               data: (entries) {
                 if (entries.isEmpty) {
-                  return const EmptyView(
-                    message: 'No students enrolled in this batch',
+                  return EmptyView(
+                    message: context.l10n.attendanceNoStudents,
                     icon: Icons.groups_outlined,
                   );
                 }
@@ -100,7 +100,7 @@ class _ReadOnlyNotice extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'You can view this roster but not change it.',
+                context.l10n.attendanceReadOnly,
                 style: context.text.bodySmall,
               ),
             ),
@@ -144,14 +144,14 @@ class _RosterRowTile extends StatelessWidget {
                 Text(entry.studentName, style: context.text.bodyLarge),
                 if (entry.isPending)
                   Text(
-                    'Will send when online',
+                    context.l10n.attendanceWillSend,
                     style: context.text.labelSmall?.copyWith(
                       color: HufzTokens.warning,
                     ),
                   )
                 else if (!entry.isMarked)
                   Text(
-                    'Not marked',
+                    context.l10n.attendanceNotMarked,
                     style: context.text.labelSmall?.copyWith(
                       color: context.colors.onSurfaceVariant,
                     ),
@@ -188,12 +188,24 @@ class _TallyFooter extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
-              _Count(label: 'Present', value: tally.present, color: HufzTokens.present),
-              _Count(label: 'Absent', value: tally.absent, color: HufzTokens.absent),
-              _Count(label: 'Late', value: tally.late, color: HufzTokens.late),
+              _Count(
+                label: context.l10n.attendancePresent,
+                value: tally.present,
+                color: HufzTokens.present,
+              ),
+              _Count(
+                label: context.l10n.attendanceAbsent,
+                value: tally.absent,
+                color: HufzTokens.absent,
+              ),
+              _Count(
+                label: context.l10n.attendanceLate,
+                value: tally.late,
+                color: HufzTokens.late,
+              ),
               const Spacer(),
               Text(
-                '${tally.marked} of ${tally.total}',
+                context.l10n.attendanceMarkedOfTotal(tally.marked, tally.total),
                 style: context.text.labelLarge?.copyWith(
                   color: tally.isComplete ? HufzTokens.present : context.colors.onSurfaceVariant,
                 ),
