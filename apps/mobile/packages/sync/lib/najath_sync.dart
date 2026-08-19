@@ -3,5 +3,6 @@
 /// wins the connection.
 library;
 
+export 'src/delta_pull.dart';
 export 'src/sync_engine.dart';
 export 'src/sync_task.dart';

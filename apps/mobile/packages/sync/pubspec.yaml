@@ -24,5 +24,9 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # Test-only: the replay test needs a file-backed database to survive a
+  # simulated process death.
+  drift: ^2.34.3
+  path: ^1.9.1
 
 flutter:

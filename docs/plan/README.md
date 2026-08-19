@@ -6,6 +6,11 @@ carries an acceptance line you can argue about before writing code.
 Read [`docs/engineering/`](../engineering/README.md) first — the plans assume
 those rules and do not repeat them.
 
+## Where things stand
+
+[`STATUS.md`](STATUS.md) is the audited state of every task and module —
+checked against the code, not against intentions.
+
 ## Task IDs
 
 ```

@@ -174,6 +174,7 @@ class HifzDailyLogs extends Table {
 /// The app never blocks a teacher on connectivity: a mark is committed to the
 /// tables above and queued here, and the sync engine drains it in order.
 @TableIndex(name: 'outbox_entity_created_idx', columns: {#entity, #createdAt})
+@TableIndex(name: 'outbox_idempotency_idx', columns: {#idempotencyKey})
 class SyncOutbox extends Table {
   /// Client-generated UUID v7, same id as the record it carries.
   TextColumn get id => text()();

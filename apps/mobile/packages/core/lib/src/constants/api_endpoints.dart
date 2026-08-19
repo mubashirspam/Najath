@@ -24,6 +24,9 @@ class ApiEndpoints {
 
   /// Role, permission set and allowed screens for the signed-in principal.
   static const String myAccess = '/me/access';
+
+  /// Delta pull for the offline mirror: changed rows, tombstones and a cursor.
+  static const String syncPull = '/sync/pull';
   static const String myProfile = '/me/profile';
 
   // --- Academics -----------------------------------------------------------

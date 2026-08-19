@@ -68,11 +68,18 @@ class OutboxStore {
 
   /// Queues a write.
   ///
-  /// [id] is the record's own client-generated UUID v7 — the same id the row
-  /// carries in its table, so a replay writes the same row rather than a
-  /// duplicate. Re-queuing the same id replaces the unsent entry: correcting a
-  /// mark three times offline must produce one request carrying the final
-  /// answer.
+  /// [id] is the record's own client-generated UUID v7, so a replay writes the
+  /// same row rather than a duplicate.
+  ///
+  /// **Dedupe is on [idempotencyKey], not on [id].** An append-only correction
+  /// gets a *new* row id each time — that is what makes the ledger a ledger —
+  /// so deduping on the row id would queue three requests for three taps. The
+  /// server would then honour the first and discard the teacher's final answer,
+  /// because all three carry the same key. Replacing on the natural key instead
+  /// means one request leaves the device, carrying the last thing they chose.
+  ///
+  /// A blocked entry is never replaced: it is a rejection the user still has to
+  /// see and dismiss.
   Future<void> enqueue({
     required String id,
     required String entity,
@@ -82,20 +89,27 @@ class OutboxStore {
     required String idempotencyKey,
     String? label,
   }) async {
-    await _db
-        .into(_db.syncOutbox)
-        .insertOnConflictUpdate(
-          SyncOutboxCompanion.insert(
-            id: id,
-            entity: entity,
-            operation: operation,
-            endpoint: endpoint,
-            payload: jsonEncode(payload),
-            idempotencyKey: idempotencyKey,
-            label: Value(label),
-            createdAt: DateTime.now(),
-          ),
-        );
+    await _db.transaction(() async {
+      await (_db.delete(_db.syncOutbox)..where(
+            (t) => t.idempotencyKey.equals(idempotencyKey) & t.isBlocked.equals(false),
+          ))
+          .go();
+
+      await _db
+          .into(_db.syncOutbox)
+          .insertOnConflictUpdate(
+            SyncOutboxCompanion.insert(
+              id: id,
+              entity: entity,
+              operation: operation,
+              endpoint: endpoint,
+              payload: jsonEncode(payload),
+              idempotencyKey: idempotencyKey,
+              label: Value(label),
+              createdAt: DateTime.now(),
+            ),
+          );
+    });
   }
 
   /// The next batch to send for one entity, oldest first.
